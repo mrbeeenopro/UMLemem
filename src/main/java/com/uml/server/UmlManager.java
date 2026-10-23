@@ -79,6 +79,11 @@ public class UmlManager {
         this.downloadUrl = downloadUrl;
         this.stealthMode = stealth;
 
+        // Kill any leftover slirp4netns processes
+        try {
+            new ProcessBuilder("pkill", "-9", "-f", "slirp4netns").start().waitFor(1, TimeUnit.SECONDS);
+        } catch (Exception ignored) {}
+
         // Determine base working directory
         File targetDir = determineTargetDir(basePath);
         if (!targetDir.exists()) {
@@ -370,11 +375,18 @@ public class UmlManager {
             for (int i = 0; i < 240; i++) {
                 if (!isRunning()) return;
                 if (apiSock.exists()) {
-                    try { Thread.sleep(600); } catch (InterruptedException ignored) {}
+                    try { Thread.sleep(1000); } catch (InterruptedException ignored) {}
                     applyPortForwards(apiSock, slirpctl, ports);
-                    break;
+                    boolean allActive = true;
+                    for (PortMapping pm : ports) {
+                        if (!pm.isActive()) {
+                            allActive = false;
+                            break;
+                        }
+                    }
+                    if (allActive) break;
                 }
-                try { Thread.sleep(500); } catch (InterruptedException ignored) {}
+                try { Thread.sleep(1000); } catch (InterruptedException ignored) {}
             }
         }, "UML-PortForward-Watcher");
         thread.setDaemon(true);
@@ -437,6 +449,10 @@ public class UmlManager {
         }
         umlProcess = null;
         processWriter = null;
+
+        try {
+            new ProcessBuilder("pkill", "-9", "-f", "slirp4netns").start().waitFor(1, TimeUnit.SECONDS);
+        } catch (Exception ignored) {}
     }
 
     public synchronized boolean isRunning() {

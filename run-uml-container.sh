@@ -4,8 +4,9 @@ set -e
 # Disable core dumps to prevent filling container disk space
 ulimit -c 0 2>/dev/null || true
 
-# Clean any leftover temp files or core dumps from previous runs
-rm -f /tmp/vm_file-* /tmp/core* /tmp/bess-*.sock /tmp/api-*.sock 2>/dev/null || true
+# Clean any leftover slirp processes, temp files or core dumps from previous runs
+pkill -9 -f slirp4netns 2>/dev/null || true
+rm -f /tmp/vm_file-* /tmp/core* /tmp/bess-*.sock /tmp/api-*.sock /dev/shm/vm_file-* /tmp/slirp-* 2>/dev/null || true
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
@@ -184,7 +185,7 @@ exec "$KERNEL" \
     mem="${UML_MEMORY}" \
     ncpus="${UML_CPUS}" \
     seccomp=auto \
-    ubd0="${ROOTFS}" \
+    ubd0dt="${ROOTFS}" \
     root=/dev/ubda rw \
     vec0:transport=bess,dst="${BESS_SOCK}",depth=128,gro=1 \
     con0=fd:0,fd:1 \

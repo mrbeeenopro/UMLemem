@@ -155,7 +155,7 @@ if [[ "${ENABLE_NET}" -eq 1 ]]; then
 fi
 
 UML_ARGS=(
-    "ubd0=${ROOTFS_IMG}"
+    "ubd0dt=${ROOTFS_IMG}"
     "root=/dev/ubda"
     "rw"
     "mem=${MEM}"
