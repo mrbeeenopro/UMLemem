@@ -1,6 +1,12 @@
 #!/bin/bash
 set -e
 
+# Disable core dumps to prevent filling container disk space
+ulimit -c 0 2>/dev/null || true
+
+# Clean any leftover temp files or core dumps from previous runs
+rm -f /tmp/vm_file-* /tmp/core* /tmp/bess-*.sock /tmp/api-*.sock 2>/dev/null || true
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
