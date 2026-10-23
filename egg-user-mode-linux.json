@@ -1,0 +1,63 @@
+{
+    "_comment": "DO NOT EDIT: FILE GENERATED AUTOMATICALLY BY PTERODACTYL PANEL - PTERODACTYL.IO",
+    "meta": {
+        "version": "PTDL_v2",
+        "update_url": null
+    },
+    "exported_at": "2026-10-23T04:36:00+00:00",
+    "name": "User Mode Linux - Debian 12 (Kernel 7.0 SMP)",
+    "author": "mrbeenopro",
+    "description": "Runs a full Debian 12 virtual machine inside Pterodactyl / Calagopus using User Mode Linux (Linux Kernel 7.0 with SMP multi-vCPU support). Operates 100% rootless in unprivileged Docker containers without CAP_NET_ADMIN or root privileges using BESS/slirp user-mode networking. Features a 10GB disk, OpenSSH server (default root password: 12345678), full outbound Internet access, and Virtual X11 forwarding via SSH.",
+    "features": null,
+    "docker_images": {
+        "ghcr.io/pterodactyl/yolks:debian": "ghcr.io/pterodactyl/yolks:debian",
+        "ghcr.io/pterodactyl/yolks:java_25": "ghcr.io/pterodactyl/yolks:java_25"
+    },
+    "file_denylist": [],
+    "startup": "./run-uml-container.sh",
+    "config": {
+        "files": "{}",
+        "startup": "{\r\n    \"done\": \"Started OpenBSD Secure Shell server\"\r\n}",
+        "logs": "{}",
+        "stop": "^C"
+    },
+    "scripts": {
+        "installation": {
+            "script": "#!/bin/bash\r\necho 'User Mode Linux files installed.'\r\nchmod +x /mnt/server/*.sh /mnt/server/vmlinux-7.0 /mnt/server/slirp4netns /mnt/server/slirpctl 2>/dev/null || true\r\necho 'Installation completed.'",
+            "container": "ghcr.io/pterodactyl/yolks:debian",
+            "entrypoint": "bash"
+        }
+    },
+    "variables": [
+        {
+            "name": "Server Port",
+            "description": "The external allocation port that will be forwarded to the UML guest SSH server (port 22).",
+            "env_variable": "SERVER_PORT",
+            "default_value": "23621",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|numeric|between:1024,65535",
+            "field_type": "text"
+        },
+        {
+            "name": "UML Virtual CPUs",
+            "description": "Number of virtual CPU cores allocated to the UML guest (SMP).",
+            "env_variable": "UML_CPUS",
+            "default_value": "2",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|numeric|between:1,16",
+            "field_type": "text"
+        },
+        {
+            "name": "UML Guest Memory",
+            "description": "RAM allocated to the UML guest (e.g. 1024M, 2048M).",
+            "env_variable": "UML_MEMORY",
+            "default_value": "2048M",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|max:10",
+            "field_type": "text"
+        }
+    ]
+}
