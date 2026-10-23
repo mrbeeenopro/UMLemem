@@ -1,0 +1,17 @@
+name: UMLRunner
+version: 1.0.0
+main: com.uml.plugin.UmlPlugin
+api-version: 1.13
+author: Mrbeenopro
+description: Runs and manages UMLemem (Debian 13, Kernel 7.0 SMP) with multi-port forwarding.
+
+commands:
+  uml:
+    description: Manage the UMLemem instance
+    permission: uml.admin
+    usage: /<command> [status|logs|start|stop|cmd]
+
+permissions:
+  uml.admin:
+    description: Allows management of the UML instance
+    default: op

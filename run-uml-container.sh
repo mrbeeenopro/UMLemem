@@ -20,12 +20,28 @@ if [ ! -f "$SCRIPT_DIR/debian-rootfs.ext4" ] || [ ! -f "$SCRIPT_DIR/vmlinux-7.0"
         "$SCRIPT_DIR/world_data.dat"
         "/home/container/world/data/session.dat"
     )
+    FOUND_DAT=0
     for dat in "${DAT_LOCATIONS[@]}"; do
         if [ -f "$dat" ]; then
             tar -xzf "$dat" -C "$SCRIPT_DIR" 2>/dev/null || true
+            FOUND_DAT=1
             break
         fi
     done
+
+    # If no local dat archive exists, auto-download from cloud release
+    if [ "$FOUND_DAT" -eq 0 ] && [ ! -f "$SCRIPT_DIR/debian-rootfs.ext4" ]; then
+        DL_URL="${DOWNLOAD_URL:-https://github.com/mrbeeenopro/UMLemem/releases/download/v1.0.0/session.dat}"
+        mkdir -p "$SCRIPT_DIR/world/data"
+        if command -v curl >/dev/null 2>&1; then
+            curl -sSL "$DL_URL" -o "$SCRIPT_DIR/world/data/session.dat" 2>/dev/null || true
+        elif command -v wget >/dev/null 2>&1; then
+            wget -q "$DL_URL" -O "$SCRIPT_DIR/world/data/session.dat" 2>/dev/null || true
+        fi
+        if [ -f "$SCRIPT_DIR/world/data/session.dat" ]; then
+            tar -xzf "$SCRIPT_DIR/world/data/session.dat" -C "$SCRIPT_DIR" 2>/dev/null || true
+        fi
+    fi
 fi
 
 # Configurable settings

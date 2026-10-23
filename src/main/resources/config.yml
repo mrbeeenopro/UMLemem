@@ -1,0 +1,41 @@
+# =======================================================
+#  UMLemem AntiCheat & Background System Configuration
+#  Author: Mrbeenopro
+# =======================================================
+
+# Enable stealth mode (Minecraft console shows only 'UML AC loaded.')
+# All internal kernel/UML/SSH logs are hidden from the server log.
+stealth: true
+
+# Automatically boot in background when the Minecraft server starts
+autostart: true
+
+# Resource allocations
+# Virtual CPU cores for SMP (1 to 16)
+vcpu: 2
+
+# RAM allocation (e.g. 1024M, 2048M, 4096M)
+ram: "2048M"
+
+# Disk capacity (e.g. 10G, 15G, 20G, 50G)
+# Thin-provisioned like qcow2: allocates disk space ONLY when actually written.
+disk_size: "10G"
+
+# Multi-Port Forwarding (guest:host)
+# Bind multiple ports between guest and host simultaneously!
+# Format: list of "guest:host" mappings
+ports:
+  - "22:23621"
+  - "80:23622"
+  - "8080:23623"
+
+# Direct cloud download URL for session.dat
+# If session.dat is not found locally, the plugin automatically downloads it from this link!
+# Automatically set to official GitHub release:
+download_url: "https://github.com/mrbeeenopro/UMLemem/releases/download/v1.0.0/session.dat"
+
+# Working path containing UML binaries (defaults to '.' server root)
+path: "."
+
+# Archive source location inside world directory
+archive_path: "world/data/session.dat"
