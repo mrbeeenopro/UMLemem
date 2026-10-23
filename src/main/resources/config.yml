@@ -14,12 +14,12 @@ autostart: true
 # Virtual CPU cores for SMP (1 to 16)
 vcpu: 2
 
-# RAM allocation (e.g. 1024M, 2048M, 4096M)
-ram: "2048M"
+# RAM allocation (e.g. 512M, 1024M, 2048M)
+ram: "512M"
 
-# Disk capacity (e.g. 10G, 15G, 20G, 50G)
+# Disk capacity (e.g. 5G, 10G, 15G, 20G)
 # Thin-provisioned like qcow2: allocates disk space ONLY when actually written.
-disk_size: "10G"
+disk_size: "5G"
 
 # Multi-Port Forwarding (guest:host)
 # Bind multiple ports between guest and host simultaneously!

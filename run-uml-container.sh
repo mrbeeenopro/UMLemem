@@ -92,7 +92,7 @@ chmod +x "$SCRIPT_DIR"/vmlinux-7.0 "$SCRIPT_DIR"/slirp4netns "$SCRIPT_DIR"/slirp
 # Resolve multi-port forwarding (guest:host)
 PORTS_TO_FORWARD="${PORTS:-${PORT_FORWARD:-22:${SERVER_PORT:-23621}}}"
 
-UML_MEMORY="${SERVER_MEMORY:-${UML_MEMORY:-2048M}}"
+UML_MEMORY="${SERVER_MEMORY:-${UML_MEMORY:-512M}}"
 if [[ "$UML_MEMORY" =~ ^[0-9]+$ ]]; then
     UML_MEMORY="${UML_MEMORY}M"
 fi
