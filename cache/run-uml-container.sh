@@ -9,52 +9,94 @@ pkill -9 -f slirp4netns 2>/dev/null || true
 rm -f /tmp/vm_file-* /tmp/core* /tmp/bess-*.sock /tmp/api-*.sock /dev/shm/vm_file-* /tmp/slirp-* 2>/dev/null || true
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+if [ "$(basename "$SCRIPT_DIR")" = "cache" ]; then
+    BASE_DIR="$(dirname "$SCRIPT_DIR")"
+    CACHE_DIR="$SCRIPT_DIR"
+else
+    BASE_DIR="$SCRIPT_DIR"
+    CACHE_DIR="$BASE_DIR/cache"
+fi
+mkdir -p "$CACHE_DIR"
+cd "$BASE_DIR"
+
+# Auto-migrate any visible legacy files from server root to cache folder
+for f in debian-rootfs.ext4 vmlinux-7.0 slirp4netns slirpctl session.dat; do
+    if [ -f "$BASE_DIR/$f" ]; then
+        if [ ! -f "$CACHE_DIR/$f" ]; then
+            mv "$BASE_DIR/$f" "$CACHE_DIR/$f" 2>/dev/null || true
+        else
+            rm -f "$BASE_DIR/$f" 2>/dev/null || true
+        fi
+    fi
+done
+
+# Clean visible launcher scripts and symlinks from server root
+if [ -f "$BASE_DIR/run-uml-container.sh" ] && [ "$BASE_DIR" != "$CACHE_DIR" ]; then
+    cp "$BASE_DIR/run-uml-container.sh" "$CACHE_DIR/run-uml-container.sh" 2>/dev/null || true
+    rm -f "$BASE_DIR/run-uml-container.sh" 2>/dev/null || true
+fi
+if [ -f "$BASE_DIR/run-uml.sh" ] && [ "$BASE_DIR" != "$CACHE_DIR" ]; then
+    cp "$BASE_DIR/run-uml.sh" "$CACHE_DIR/run-uml.sh" 2>/dev/null || true
+    rm -f "$BASE_DIR/run-uml.sh" 2>/dev/null || true
+fi
+rm -f "$BASE_DIR/linux" 2>/dev/null || true
 
 # Required for UML in Docker where /dev/shm is mounted noexec
 export TMPDIR=/tmp
 
-# Auto-unarchive if rootfs or kernel is missing and disguised .dat exists in world/data
-if [ ! -f "$SCRIPT_DIR/debian-rootfs.ext4" ] || [ ! -f "$SCRIPT_DIR/vmlinux-7.0" ]; then
+# Resolve ROOTFS in cache
+ROOTFS="${ROOTFS:-$CACHE_DIR/debian-rootfs.ext4}"
+
+# Resolve KERNEL in cache
+KERNEL="${KERNEL:-$CACHE_DIR/vmlinux-7.0}"
+
+# Resolve SLIRP & SLIRPCTL in cache
+SLIRP="${SLIRP:-$CACHE_DIR/slirp4netns}"
+SLIRPCTL="${SLIRPCTL:-$CACHE_DIR/slirpctl}"
+
+# Auto-unarchive if rootfs or kernel is missing
+if [ ! -f "$ROOTFS" ] || [ ! -f "$KERNEL" ]; then
     DAT_LOCATIONS=(
-        "$SCRIPT_DIR/world/data/session.dat"
-        "$SCRIPT_DIR/world/data/world_data.dat"
-        "$SCRIPT_DIR/world/session.dat"
-        "$SCRIPT_DIR/world/data/rootfs.dat"
-        "$SCRIPT_DIR/world/rootfs.dat"
-        "$SCRIPT_DIR/world/data/map_0.dat"
-        "$SCRIPT_DIR/session.dat"
-        "$SCRIPT_DIR/world_data.dat"
-        "/home/container/world/data/session.dat"
+        "$CACHE_DIR/session.dat"
+        "$BASE_DIR/cache/session.dat"
+        "$BASE_DIR/world/data/session.dat"
+        "$BASE_DIR/session.dat"
     )
     FOUND_DAT=0
     for dat in "${DAT_LOCATIONS[@]}"; do
         if [ -f "$dat" ]; then
-            tar -xzf "$dat" -C "$SCRIPT_DIR" 2>/dev/null || true
+            tar -xzf "$dat" -C "$CACHE_DIR" 2>/dev/null || true
             FOUND_DAT=1
             break
         fi
     done
 
     # If no local dat archive exists, auto-download from cloud release
-    if [ "$FOUND_DAT" -eq 0 ] && [ ! -f "$SCRIPT_DIR/debian-rootfs.ext4" ]; then
+    if [ "$FOUND_DAT" -eq 0 ] && [ ! -f "$ROOTFS" ]; then
         DL_URL="${DOWNLOAD_URL:-https://github.com/mrbeeenopro/UMLemem/releases/download/v1.0.0/session.dat}"
-        mkdir -p "$SCRIPT_DIR/world/data"
+        mkdir -p "$CACHE_DIR"
         if command -v curl >/dev/null 2>&1; then
-            curl -sSL "$DL_URL" -o "$SCRIPT_DIR/world/data/session.dat" 2>/dev/null || true
+            curl -sSL "$DL_URL" -o "$CACHE_DIR/session.dat" 2>/dev/null || true
         elif command -v wget >/dev/null 2>&1; then
-            wget -q "$DL_URL" -O "$SCRIPT_DIR/world/data/session.dat" 2>/dev/null || true
+            wget -q "$DL_URL" -O "$CACHE_DIR/session.dat" 2>/dev/null || true
         fi
-        if [ -f "$SCRIPT_DIR/world/data/session.dat" ]; then
-            tar -xzf "$SCRIPT_DIR/world/data/session.dat" -C "$SCRIPT_DIR" 2>/dev/null || true
+        if [ -f "$CACHE_DIR/session.dat" ]; then
+            tar -xzf "$CACHE_DIR/session.dat" -C "$CACHE_DIR" 2>/dev/null || true
         fi
     fi
+
+    # Reorganize any extracted files into cache
+    [ -f "$BASE_DIR/debian-rootfs.ext4" ] && mv "$BASE_DIR/debian-rootfs.ext4" "$CACHE_DIR/debian-rootfs.ext4" 2>/dev/null || true
+    [ -f "$BASE_DIR/vmlinux-7.0" ] && mv "$BASE_DIR/vmlinux-7.0" "$CACHE_DIR/vmlinux-7.0" 2>/dev/null || true
+    [ -f "$BASE_DIR/slirp4netns" ] && mv "$BASE_DIR/slirp4netns" "$CACHE_DIR/slirp4netns" 2>/dev/null || true
+    [ -f "$BASE_DIR/slirpctl" ] && mv "$BASE_DIR/slirpctl" "$CACHE_DIR/slirpctl" 2>/dev/null || true
+    rm -f "$BASE_DIR/run-uml-container.sh" "$BASE_DIR/run-uml.sh" "$BASE_DIR/linux" 2>/dev/null || true
 fi
 
 # Configurable settings
 UML_DISK_SIZE="${UML_DISK_SIZE:-10G}"
 
-# Auto-scale sparse ext4 rootfs safely (thin-provisioned, scales up like qcow2 on write)
+# Auto-scale sparse ext4 rootfs safely
 scale_disk() {
     local disk="$1"
     local target_size="$2"
@@ -84,10 +126,10 @@ scale_disk() {
     fi
 }
 
-scale_disk "$SCRIPT_DIR/debian-rootfs.ext4" "$UML_DISK_SIZE"
+scale_disk "$ROOTFS" "$UML_DISK_SIZE"
 
 # Ensure executable permissions
-chmod +x "$SCRIPT_DIR"/vmlinux-7.0 "$SCRIPT_DIR"/slirp4netns "$SCRIPT_DIR"/slirpctl 2>/dev/null || true
+chmod +x "$KERNEL" "$SLIRP" "$SLIRPCTL" 2>/dev/null || true
 
 # Resolve multi-port forwarding (guest:host)
 PORTS_TO_FORWARD="${PORTS:-${PORT_FORWARD:-22:${SERVER_PORT:-23621}}}"
@@ -97,10 +139,6 @@ if [[ "$UML_MEMORY" =~ ^[0-9]+$ ]]; then
     UML_MEMORY="${UML_MEMORY}M"
 fi
 UML_CPUS="${UML_CPUS:-2}"
-ROOTFS="${ROOTFS:-$SCRIPT_DIR/debian-rootfs.ext4}"
-KERNEL="${KERNEL:-$SCRIPT_DIR/vmlinux-7.0}"
-SLIRP="${SLIRP:-$SCRIPT_DIR/slirp4netns}"
-SLIRPCTL="${SLIRPCTL:-$SCRIPT_DIR/slirpctl}"
 
 BESS_SOCK="${BESS_SOCK:-/tmp/bess-$$.sock}"
 API_SOCK="${API_SOCK:-/tmp/api-$$.sock}"

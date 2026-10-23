@@ -7,8 +7,19 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-KERNEL_BIN="${SCRIPT_DIR}/vmlinux-7.0"
-ROOTFS_IMG="${SCRIPT_DIR}/debian-rootfs.ext4"
+if [ "$(basename "$SCRIPT_DIR")" = "cache" ]; then
+    BASE_DIR="$(dirname "$SCRIPT_DIR")"
+    CACHE_DIR="$SCRIPT_DIR"
+else
+    BASE_DIR="$SCRIPT_DIR"
+    CACHE_DIR="$BASE_DIR/cache"
+fi
+
+KERNEL_BIN="${CACHE_DIR}/vmlinux-7.0"
+[ -f "$KERNEL_BIN" ] || KERNEL_BIN="${SCRIPT_DIR}/vmlinux-7.0"
+
+ROOTFS_IMG="${CACHE_DIR}/debian-rootfs.ext4"
+[ -f "$ROOTFS_IMG" ] || ROOTFS_IMG="${SCRIPT_DIR}/debian-rootfs.ext4"
 CPUS=2
 MEM="512M"
 EXTRA_ARGS=()

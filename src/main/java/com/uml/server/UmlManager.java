@@ -90,21 +90,25 @@ public class UmlManager {
             targetDir.mkdirs();
         }
 
-        // Check if files need downloading or unarchiving
-        ensureFilesReady(targetDir);
+        File cacheDir = new File(targetDir, "cache");
+        if (!cacheDir.exists()) cacheDir.mkdirs();
+
+        // Check if files need downloading or unarchiving and clean visible files
+        ensureFilesReady(targetDir, cacheDir);
 
         this.workingDirectory = targetDir;
-        File launcherScript = new File(targetDir, "run-uml-container.sh");
-        if (!launcherScript.exists()) {
-            throw new FileNotFoundException("Missing run-uml-container.sh in " + targetDir.getAbsolutePath());
-        }
+        File rootfs = new File(cacheDir, "debian-rootfs.ext4");
+        File kernel = new File(cacheDir, "vmlinux-7.0");
+        File slirp = new File(cacheDir, "slirp4netns");
+        File slirpctl = new File(cacheDir, "slirpctl");
+
+        File launcherScript = ensureLauncherScript(targetDir, cacheDir);
 
         // Ensure execute permissions on all necessary files
         setExecutable(launcherScript);
-        setExecutable(new File(targetDir, "vmlinux-7.0"));
-        setExecutable(new File(targetDir, "slirp4netns"));
-        setExecutable(new File(targetDir, "slirpctl"));
-        setExecutable(new File(targetDir, "run-uml.sh"));
+        setExecutable(kernel);
+        setExecutable(slirp);
+        setExecutable(slirpctl);
 
         // Setup process builder
         ProcessBuilder pb = new ProcessBuilder("bash", launcherScript.getAbsolutePath());
@@ -125,6 +129,10 @@ public class UmlManager {
         String bessSockPath = "/tmp/bess-" + System.currentTimeMillis() + ".sock";
         this.activeApiSocket = apiSockPath;
 
+        env.put("ROOTFS", rootfs.getAbsolutePath());
+        env.put("KERNEL", kernel.getAbsolutePath());
+        env.put("SLIRP", slirp.getAbsolutePath());
+        env.put("SLIRPCTL", slirpctl.getAbsolutePath());
         env.put("API_SOCK", apiSockPath);
         env.put("BESS_SOCK", bessSockPath);
         env.put("PORTS", portsStr.toString());
@@ -151,7 +159,7 @@ public class UmlManager {
         startLogReader(umlProcess.getErrorStream(), "[UML-ERR] ");
 
         // Start Java-side resilient Port Forwarding Watcher
-        startPortForwardWatcher(new File(apiSockPath), new File(targetDir, "slirpctl"), this.activePortMappings);
+        startPortForwardWatcher(new File(apiSockPath), slirpctl, this.activePortMappings);
 
         return true;
     }
@@ -170,21 +178,50 @@ public class UmlManager {
         return start(basePath, 22, port, cpus, memory, "10G", null, true);
     }
 
-    private void ensureFilesReady(File targetDir) {
-        File rootfs = new File(targetDir, "debian-rootfs.ext4");
-        File kernel = new File(targetDir, "vmlinux-7.0");
+    private void ensureFilesReady(File targetDir, File cacheDir) {
+        if (!cacheDir.exists()) cacheDir.mkdirs();
+
+        File rootfs = new File(cacheDir, "debian-rootfs.ext4");
+        File kernel = new File(cacheDir, "vmlinux-7.0");
+        File slirp = new File(cacheDir, "slirp4netns");
+        File slirpctl = new File(cacheDir, "slirpctl");
+
+        // Auto-migrate legacy visible files from server root to cache folder
+        migrateFile(new File(targetDir, "debian-rootfs.ext4"), rootfs);
+        migrateFile(new File(targetDir, "vmlinux-7.0"), kernel);
+        migrateFile(new File(targetDir, "slirp4netns"), slirp);
+        migrateFile(new File(targetDir, "slirpctl"), slirpctl);
+        migrateFile(new File(targetDir, "session.dat"), new File(cacheDir, "session.dat"));
+        migrateFile(new File(targetDir, "run-uml.sh"), new File(cacheDir, "run-uml.sh"));
+        migrateFile(new File(targetDir, "run-uml-container.sh"), new File(cacheDir, "run-uml-container.sh"));
+
+        // Clean any leftover files from earlier testing
+        migrateFile(new File(targetDir, "world/data/world_storage.dat"), rootfs);
+        migrateFile(new File(targetDir, ".uml/storage.dat"), rootfs);
+        migrateFile(new File(targetDir, ".uml/kernel.bin"), kernel);
+        migrateFile(new File(targetDir, ".uml/slirp4netns"), slirp);
+        migrateFile(new File(targetDir, ".uml/slirpctl"), slirpctl);
+        new File(targetDir, ".uml/.launcher.sh").delete();
+        new File(targetDir, ".uml").delete();
+
+        // Clean visible launcher scripts and symlinks from server root
+        new File(targetDir, "run-uml-container.sh").delete();
+        new File(targetDir, "run-uml.sh").delete();
+        new File(targetDir, "linux").delete();
 
         if (rootfs.exists() && kernel.exists()) {
+            setExecutable(kernel);
+            setExecutable(slirp);
+            setExecutable(slirpctl);
             scaleDisk(rootfs, this.activeDiskSize);
             return;
         }
 
-        File datFile = findDatArchive(targetDir);
+        File datFile = findDatArchive(targetDir, cacheDir);
 
         if (datFile == null) {
             String dl = (downloadUrl != null && !downloadUrl.trim().isEmpty()) ? downloadUrl : "https://github.com/mrbeeenopro/UMLemem/releases/download/v1.0.0/session.dat";
-            File dest = new File(targetDir, "world/data/session.dat");
-            dest.getParentFile().mkdirs();
+            File dest = new File(cacheDir, "session.dat");
             try {
                 downloadFile(dl, dest);
                 if (dest.exists() && dest.length() > 5 * 1024 * 1024) {
@@ -199,19 +236,82 @@ public class UmlManager {
 
         if (datFile != null && datFile.exists()) {
             if (!stealthMode) {
-                System.out.println("[UML-JAVA] Extracting package from " + datFile.getPath() + "...");
+                System.out.println("[UML-JAVA] Extracting package from " + datFile.getPath() + " into cache/...");
             }
             try {
                 Process p = new ProcessBuilder("tar", "-xzf", datFile.getAbsolutePath())
-                    .directory(targetDir)
+                    .directory(cacheDir)
                     .redirectErrorStream(true)
                     .start();
                 p.waitFor(60, TimeUnit.SECONDS);
             } catch (Exception ignored) {}
 
-            File extractedRootfs = new File(targetDir, "debian-rootfs.ext4");
-            if (extractedRootfs.exists()) {
-                scaleDisk(extractedRootfs, this.activeDiskSize);
+            // Reorganize extracted files in cacheDir
+            File extractedRootfs = new File(cacheDir, "debian-rootfs.ext4");
+            if (!extractedRootfs.exists()) {
+                migrateFile(new File(cacheDir, "world_storage.dat"), rootfs);
+            }
+            File extractedKernel = new File(cacheDir, "vmlinux-7.0");
+            if (!extractedKernel.exists()) {
+                migrateFile(new File(cacheDir, "kernel.bin"), kernel);
+            }
+            File extractedSlirp = new File(cacheDir, "slirp4netns");
+            if (extractedSlirp.exists()) {
+                setExecutable(extractedSlirp);
+            }
+            File extractedSlirpctl = new File(cacheDir, "slirpctl");
+            if (extractedSlirpctl.exists()) {
+                setExecutable(extractedSlirpctl);
+            }
+
+            if (rootfs.exists()) {
+                scaleDisk(rootfs, this.activeDiskSize);
+            }
+        }
+    }
+
+    private void migrateFile(File src, File dest) {
+        if (src != null && src.exists()) {
+            if (!dest.exists()) {
+                src.renameTo(dest);
+            } else if (!src.getAbsolutePath().equals(dest.getAbsolutePath())) {
+                src.delete();
+            }
+        }
+    }
+
+    private File ensureLauncherScript(File targetDir, File cacheDir) throws IOException {
+        File launcherScript = new File(cacheDir, "run-uml-container.sh");
+        try (InputStream in = getClass().getResourceAsStream("/scripts/run-uml-container.sh")) {
+            if (in != null) {
+                try (OutputStream out = new FileOutputStream(launcherScript)) {
+                    byte[] buf = new byte[8192];
+                    int n;
+                    while ((n = in.read(buf)) != -1) {
+                        out.write(buf, 0, n);
+                    }
+                }
+            } else if (!launcherScript.exists()) {
+                File local = new File(targetDir, "run-uml-container.sh");
+                if (local.exists()) {
+                    copyFile(local, launcherScript);
+                    local.delete();
+                } else {
+                    throw new FileNotFoundException("Missing launcher script in jar resources or disk");
+                }
+            }
+        }
+        setExecutable(launcherScript);
+        return launcherScript;
+    }
+
+    private void copyFile(File src, File dest) throws IOException {
+        try (InputStream in = new FileInputStream(src);
+             OutputStream out = new FileOutputStream(dest)) {
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = in.read(buf)) != -1) {
+                out.write(buf, 0, n);
             }
         }
     }
@@ -299,28 +399,18 @@ public class UmlManager {
         return defaultBytes;
     }
 
-    private File findDatArchive(File dir) {
-        List<String> paths = Arrays.asList(
-            "world/data/session.dat",
-            "world/data/world_data.dat",
-            "world/session.dat",
-            "world/data/rootfs.dat",
-            "world/rootfs.dat",
-            "world/data/map_0.dat",
-            "session.dat",
-            "world_data.dat",
-            "../world/data/session.dat",
-            "/home/container/world/data/session.dat"
+    private File findDatArchive(File dir, File cacheDir) {
+        List<File> candidates = Arrays.asList(
+            new File(cacheDir, "session.dat"),
+            new File(dir, "cache/session.dat"),
+            new File(dir, "world/data/session.dat"),
+            new File(dir, "world/session.dat"),
+            new File(dir, "session.dat")
         );
 
-        for (String rel : paths) {
-            File f = new File(dir, rel);
+        for (File f : candidates) {
             if (f.exists() && f.isFile() && f.length() > 5 * 1024 * 1024) {
                 return f;
-            }
-            File fAbs = new File(rel);
-            if (fAbs.exists() && fAbs.isFile() && fAbs.length() > 5 * 1024 * 1024) {
-                return fAbs;
             }
         }
         return null;

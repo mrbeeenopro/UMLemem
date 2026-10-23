@@ -46,7 +46,7 @@ jobs:
           Implementation-Version: 1.0.0
           EOF
 
-          cp src/main/resources/* /tmp/build/bin/
+          cp -r src/main/resources/* /tmp/build/bin/
           jar cvfm server.jar /tmp/build/MANIFEST.MF -C /tmp/build/bin .
           jar cvfm plugin.jar /tmp/build/MANIFEST.MF -C /tmp/build/bin .
 

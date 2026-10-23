@@ -1,2 +1,6 @@
 debian-rootfs.ext4
 session.dat
+cache/debian-rootfs.ext4
+cache/session.dat
+cache/*.ext4
+cache/*.dat

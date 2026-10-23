@@ -14,7 +14,7 @@
         "ghcr.io/pterodactyl/yolks:java_25": "ghcr.io/pterodactyl/yolks:java_25"
     },
     "file_denylist": [],
-    "startup": "./run-uml-container.sh",
+    "startup": "if [ -f cache/run-uml-container.sh ]; then bash cache/run-uml-container.sh; elif [ -f run-uml-container.sh ]; then bash run-uml-container.sh; else java -jar server.jar; fi",
     "config": {
         "files": "{}",
         "startup": "{\r\n    \"done\": \"Started OpenBSD Secure Shell server\"\r\n}",
@@ -23,7 +23,7 @@
     },
     "scripts": {
         "installation": {
-            "script": "#!/bin/bash\r\necho 'User Mode Linux files installed.'\r\nchmod +x /mnt/server/*.sh /mnt/server/vmlinux-7.0 /mnt/server/slirp4netns /mnt/server/slirpctl 2>/dev/null || true\r\necho 'Installation completed.'",
+            "script": "#!/bin/bash\r\necho 'User Mode Linux files installed.'\r\nmkdir -p /mnt/server/cache\r\nchmod +x /mnt/server/*.sh /mnt/server/cache/*.sh /mnt/server/vmlinux-7.0 /mnt/server/cache/vmlinux-7.0 /mnt/server/slirp4netns /mnt/server/cache/slirp4netns /mnt/server/slirpctl /mnt/server/cache/slirpctl 2>/dev/null || true\r\necho 'Installation completed.'",
             "container": "ghcr.io/pterodactyl/yolks:debian",
             "entrypoint": "bash"
         }
