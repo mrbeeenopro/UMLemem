@@ -136,3 +136,10 @@ Automated releases are built via [`.github/workflows/build-release.yml`](.github
 - Compiles Java source against Spigot API for Java 17+.
 - Packages `server.jar` and `plugin.jar`.
 - Automatically publishes or updates releases on GitHub with all binaries and scripts attached.
+
+---
+
+## 📄 License
+
+This project is licensed under the [MIT License](LICENSE) - see the [LICENSE](LICENSE) file for details.
+Copyright (c) 2026 Mrbeenopro.

@@ -12,6 +12,14 @@
     <name>UMLRunner</name>
     <description>UMLemem (Debian 13 Kernel 7.0 SMP) Java Server and Paper Plugin</description>
 
+    <licenses>
+        <license>
+            <name>MIT License</name>
+            <url>https://opensource.org/licenses/MIT</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
