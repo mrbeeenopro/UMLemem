@@ -49,7 +49,8 @@ public class UmlCommand implements CommandExecutor, TabCompleter {
                     sender.sendMessage(ChatColor.YELLOW + "  State: " + ChatColor.GREEN + "RUNNING");
                     sender.sendMessage(ChatColor.YELLOW + "  Port Forwards (Multi-Port):");
                     for (PortMapping pm : manager.getPortMappings()) {
-                        sender.sendMessage(ChatColor.WHITE + "    • " + pm.getHostPort() + " (host) -> " + pm.getGuestPort() + " (guest/" + pm.getProto() + ")");
+                        String badge = pm.isActive() ? ChatColor.GREEN + "[ACTIVE]" : ChatColor.YELLOW + "[FORWARDING]";
+                        sender.sendMessage(ChatColor.WHITE + "    • " + pm.getHostPort() + " (host) -> " + pm.getGuestPort() + " (guest/" + pm.getProto() + ") " + badge);
                     }
                     sender.sendMessage(ChatColor.YELLOW + "  vCPUs: " + ChatColor.WHITE + manager.getCpus());
                     sender.sendMessage(ChatColor.YELLOW + "  RAM: " + ChatColor.WHITE + manager.getMemory());
@@ -145,6 +146,19 @@ public class UmlCommand implements CommandExecutor, TabCompleter {
                 return true;
             }
 
+            case "forward": {
+                if (!manager.isRunning()) {
+                    sender.sendMessage(ChatColor.RED + "[UML AC] System is not running.");
+                    return true;
+                }
+                sender.sendMessage(ChatColor.GOLD + "[UML AC] " + ChatColor.YELLOW + "Re-applying port forwards...");
+                plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+                    manager.applyPortForwards();
+                    sender.sendMessage(ChatColor.GOLD + "[UML AC] " + ChatColor.GREEN + "Port forwarding re-applied.");
+                });
+                return true;
+            }
+
             default:
                 sendHelp(sender);
                 return true;
@@ -157,6 +171,7 @@ public class UmlCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.YELLOW + "/uml logs [n]" + ChatColor.WHITE + " - View recent background logs");
         sender.sendMessage(ChatColor.YELLOW + "/uml start" + ChatColor.WHITE + "  - Start system");
         sender.sendMessage(ChatColor.YELLOW + "/uml stop" + ChatColor.WHITE + "   - Stop system");
+        sender.sendMessage(ChatColor.YELLOW + "/uml forward" + ChatColor.WHITE + "- Refresh port forwardings");
         sender.sendMessage(ChatColor.YELLOW + "/uml cmd <cmd>" + ChatColor.WHITE + " - Send command to guest shell");
     }
 
@@ -164,7 +179,7 @@ public class UmlCommand implements CommandExecutor, TabCompleter {
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         List<String> list = new ArrayList<>();
         if (args.length == 1) {
-            List<String> subcommands = Arrays.asList("status", "logs", "start", "stop", "cmd");
+            List<String> subcommands = Arrays.asList("status", "logs", "start", "stop", "cmd", "forward");
             for (String s : subcommands) {
                 if (s.toLowerCase().startsWith(args[0].toLowerCase())) {
                     list.add(s);

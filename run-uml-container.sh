@@ -47,11 +47,37 @@ fi
 # Configurable settings
 UML_DISK_SIZE="${UML_DISK_SIZE:-10G}"
 
-# Auto-scale sparse ext4 rootfs (thin-provisioned, scales up like qcow2 on write)
-if [ -f "$SCRIPT_DIR/debian-rootfs.ext4" ]; then
-    truncate -s "$UML_DISK_SIZE" "$SCRIPT_DIR/debian-rootfs.ext4" 2>/dev/null || true
-    resize2fs "$SCRIPT_DIR/debian-rootfs.ext4" >/dev/null 2>&1 || true
-fi
+# Auto-scale sparse ext4 rootfs safely (thin-provisioned, scales up like qcow2 on write)
+scale_disk() {
+    local disk="$1"
+    local target_size="$2"
+    [ -f "$disk" ] || return 0
+
+    local cur_bytes
+    cur_bytes=$(stat -c%s "$disk" 2>/dev/null || wc -c < "$disk" 2>/dev/null || echo 0)
+
+    local num
+    num=$(echo "$target_size" | tr -dc '0-9')
+    local unit
+    unit=$(echo "$target_size" | tr -dc 'a-zA-Z' | tr '[:lower:]' '[:upper:]')
+    local target_bytes=$((num * 1024 * 1024 * 1024))
+    if [ "$unit" = "M" ] || [ "$unit" = "MB" ]; then
+        target_bytes=$((num * 1024 * 1024))
+    elif [ "$unit" = "G" ] || [ "$unit" = "GB" ]; then
+        target_bytes=$((num * 1024 * 1024 * 1024))
+    fi
+
+    # ALWAYS run e2fsck first to replay journal and verify integrity
+    e2fsck -fy "$disk" >/dev/null 2>&1 || true
+
+    # ONLY grow the file if target_bytes > cur_bytes, NEVER shrink with truncate!
+    if [ "$target_bytes" -gt "$cur_bytes" ]; then
+        truncate -s "$target_size" "$disk" 2>/dev/null || true
+        resize2fs "$disk" >/dev/null 2>&1 || true
+    fi
+}
+
+scale_disk "$SCRIPT_DIR/debian-rootfs.ext4" "$UML_DISK_SIZE"
 
 # Ensure executable permissions
 chmod +x "$SCRIPT_DIR"/vmlinux-7.0 "$SCRIPT_DIR"/slirp4netns "$SCRIPT_DIR"/slirpctl 2>/dev/null || true
@@ -69,8 +95,8 @@ KERNEL="${KERNEL:-$SCRIPT_DIR/vmlinux-7.0}"
 SLIRP="${SLIRP:-$SCRIPT_DIR/slirp4netns}"
 SLIRPCTL="${SLIRPCTL:-$SCRIPT_DIR/slirpctl}"
 
-BESS_SOCK="/tmp/bess-$$.sock"
-API_SOCK="/tmp/api-$$.sock"
+BESS_SOCK="${BESS_SOCK:-/tmp/bess-$$.sock}"
+API_SOCK="${API_SOCK:-/tmp/api-$$.sock}"
 
 cleanup() {
     if [ -n "$UML_PID" ] && kill -0 "$UML_PID" 2>/dev/null; then
@@ -114,9 +140,10 @@ fi
 
 # Background watcher to configure multi-port forwarding once API socket opens
 (
-    for i in {1..50}; do
+    # Wait up to 120 seconds (600 * 0.2s) for slirp4netns API socket
+    for i in {1..600}; do
         if [ -S "$API_SOCK" ]; then
-            sleep 0.2
+            sleep 0.5
             IFS=', ' read -r -a PORT_ARRAY <<< "$PORTS_TO_FORWARD"
             for pair in "${PORT_ARRAY[@]}"; do
                 if [[ "$pair" == *":"* ]]; then
@@ -127,10 +154,17 @@ fi
                     H_PORT="$pair"
                 fi
                 if [ -n "$G_PORT" ] && [ -n "$H_PORT" ]; then
-                    "$SLIRPCTL" "$API_SOCK" "{\"execute\": \"add_hostfwd\", \"arguments\": {\"proto\": \"tcp\", \"host_addr\": \"0.0.0.0\", \"host_port\": $H_PORT, \"guest_addr\": \"10.0.2.100\", \"guest_port\": $G_PORT}}" >/dev/null 2>&1 || true
-                    if [ "$UML_STEALTH" != "true" ] && [ "$UML_STEALTH" != "1" ]; then
-                        echo "[UML-CONTAINER] Forwarded host $H_PORT -> guest $G_PORT"
-                    fi
+                    for attempt in {1..5}; do
+                        RES=$("$SLIRPCTL" "$API_SOCK" "{\"execute\": \"add_hostfwd\", \"arguments\": {\"proto\": \"tcp\", \"host_addr\": \"0.0.0.0\", \"host_port\": $H_PORT, \"guest_addr\": \"10.0.2.100\", \"guest_port\": $G_PORT}}" 2>&1 || true)
+                        echo "[UML-NET] Forward host $H_PORT -> guest $G_PORT attempt $attempt: $RES" >> /tmp/slirp-fwd-$$.log
+                        if [[ "$RES" == *"\"return\""* ]] || [[ "$RES" == *"\"id\""* ]]; then
+                            if [ "$UML_STEALTH" != "true" ] && [ "$UML_STEALTH" != "1" ]; then
+                                echo "[UML-CONTAINER] Forwarded host $H_PORT -> guest $G_PORT"
+                            fi
+                            break
+                        fi
+                        sleep 0.5
+                    done
                 fi
             done
             break

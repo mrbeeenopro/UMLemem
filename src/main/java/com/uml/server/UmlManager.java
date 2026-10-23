@@ -15,6 +15,7 @@ public class UmlManager {
         private final int guestPort;
         private final int hostPort;
         private final String proto;
+        private volatile boolean active = false;
 
         public PortMapping(int guestPort, int hostPort) {
             this(guestPort, hostPort, "tcp");
@@ -29,10 +30,12 @@ public class UmlManager {
         public int getGuestPort() { return guestPort; }
         public int getHostPort() { return hostPort; }
         public String getProto() { return proto; }
+        public boolean isActive() { return active; }
+        public void setActive(boolean active) { this.active = active; }
 
         @Override
         public String toString() {
-            return hostPort + " (host) -> " + guestPort + " (guest/" + proto + ")";
+            return hostPort + " (host) -> " + guestPort + " (guest/" + proto + ")" + (active ? " [ACTIVE]" : "");
         }
     }
 
@@ -49,6 +52,7 @@ public class UmlManager {
     private String downloadUrl = null;
     private boolean stealthMode = true;
     private File workingDirectory;
+    private String activeApiSocket = null;
     private long startTime = 0;
 
     public static UmlManager getInstance() {
@@ -112,6 +116,12 @@ public class UmlManager {
         int primaryHostPort = this.activePortMappings.get(0).getHostPort();
         int primaryGuestPort = this.activePortMappings.get(0).getGuestPort();
 
+        String apiSockPath = "/tmp/api-" + System.currentTimeMillis() + ".sock";
+        String bessSockPath = "/tmp/bess-" + System.currentTimeMillis() + ".sock";
+        this.activeApiSocket = apiSockPath;
+
+        env.put("API_SOCK", apiSockPath);
+        env.put("BESS_SOCK", bessSockPath);
         env.put("PORTS", portsStr.toString());
         env.put("PORT_FORWARD", portsStr.toString());
         env.put("HOST_PORT", String.valueOf(primaryHostPort));
@@ -134,6 +144,9 @@ public class UmlManager {
         // Start background log reading threads
         startLogReader(umlProcess.getInputStream(), "[UML] ");
         startLogReader(umlProcess.getErrorStream(), "[UML-ERR] ");
+
+        // Start Java-side resilient Port Forwarding Watcher
+        startPortForwardWatcher(new File(apiSockPath), new File(targetDir, "slirpctl"), this.activePortMappings);
 
         return true;
     }
@@ -244,16 +257,22 @@ public class UmlManager {
     }
 
     public void scaleDisk(File rootfs, String sizeStr) {
+        if (!rootfs.exists()) return;
         long targetBytes = parseSizeToBytes(sizeStr, 10L * 1024 * 1024 * 1024);
-        if (rootfs.exists() && rootfs.length() < targetBytes) {
-            try {
+        try {
+            // First run e2fsck to replay journal and verify integrity
+            Process pCheck = new ProcessBuilder("e2fsck", "-fy", rootfs.getAbsolutePath()).start();
+            pCheck.waitFor(15, TimeUnit.SECONDS);
+
+            // ONLY expand if current size is strictly less than targetBytes
+            if (rootfs.length() < targetBytes) {
                 try (RandomAccessFile raf = new RandomAccessFile(rootfs, "rw")) {
                     raf.setLength(targetBytes);
                 }
-                Process p = new ProcessBuilder("resize2fs", rootfs.getAbsolutePath()).start();
-                p.waitFor(10, TimeUnit.SECONDS);
-            } catch (Exception ignored) {}
-        }
+                Process pResize = new ProcessBuilder("resize2fs", rootfs.getAbsolutePath()).start();
+                pResize.waitFor(15, TimeUnit.SECONDS);
+            }
+        } catch (Exception ignored) {}
     }
 
     public static long parseSizeToBytes(String sizeStr, long defaultBytes) {
@@ -344,6 +363,55 @@ public class UmlManager {
         }, "UML-Output-Reader");
         thread.setDaemon(true);
         thread.start();
+    }
+
+    private void startPortForwardWatcher(File apiSock, File slirpctl, List<PortMapping> ports) {
+        Thread thread = new Thread(() -> {
+            for (int i = 0; i < 240; i++) {
+                if (!isRunning()) return;
+                if (apiSock.exists()) {
+                    try { Thread.sleep(600); } catch (InterruptedException ignored) {}
+                    applyPortForwards(apiSock, slirpctl, ports);
+                    break;
+                }
+                try { Thread.sleep(500); } catch (InterruptedException ignored) {}
+            }
+        }, "UML-PortForward-Watcher");
+        thread.setDaemon(true);
+        thread.start();
+    }
+
+    public synchronized void applyPortForwards() {
+        if (this.activeApiSocket != null && this.workingDirectory != null) {
+            applyPortForwards(new File(this.activeApiSocket), new File(this.workingDirectory, "slirpctl"), this.activePortMappings);
+        }
+    }
+
+    public static void applyPortForwards(File apiSock, File slirpctl, List<PortMapping> ports) {
+        if (!apiSock.exists() || !slirpctl.exists()) return;
+        for (PortMapping pm : ports) {
+            for (int attempt = 1; attempt <= 5; attempt++) {
+                try {
+                    String json = String.format("{\"execute\": \"add_hostfwd\", \"arguments\": {\"proto\": \"%s\", \"host_addr\": \"0.0.0.0\", \"host_port\": %d, \"guest_addr\": \"10.0.2.100\", \"guest_port\": %d}}",
+                            pm.getProto(), pm.getHostPort(), pm.getGuestPort());
+                    Process p = new ProcessBuilder(slirpctl.getAbsolutePath(), apiSock.getAbsolutePath(), json)
+                            .redirectErrorStream(true)
+                            .start();
+                    StringBuilder out = new StringBuilder();
+                    try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
+                        String line;
+                        while ((line = r.readLine()) != null) out.append(line);
+                    }
+                    p.waitFor(5, TimeUnit.SECONDS);
+                    String res = out.toString();
+                    if (res.contains("\"return\"") || res.contains("\"id\"")) {
+                        pm.setActive(true);
+                        break;
+                    }
+                } catch (Exception ignored) {}
+                try { Thread.sleep(500); } catch (InterruptedException ignored) {}
+            }
+        }
     }
 
     public synchronized void stop() {
