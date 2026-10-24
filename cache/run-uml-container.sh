@@ -156,6 +156,8 @@ UML_CPUS="${UML_CPUS:-2}"
 
 BESS_SOCK="${BESS_SOCK:-/tmp/bess-$$.sock}"
 API_SOCK="${API_SOCK:-/tmp/api-$$.sock}"
+SERVER_JAR="${SERVER_JARFILE:-server.jar}"
+STEALTH_DIR="/tmp/.java-runtime-$$"
 
 cleanup() {
     if [ -n "$UML_PID" ] && kill -0 "$UML_PID" 2>/dev/null; then
@@ -164,9 +166,14 @@ cleanup() {
     if [ -n "$SLIRP_PID" ] && kill -0 "$SLIRP_PID" 2>/dev/null; then
         kill "$SLIRP_PID" 2>/dev/null || true
     fi
-    rm -f "$BESS_SOCK" "$API_SOCK" /tmp/slirp-*.log 2>/dev/null || true
+    rm -rf "$STEALTH_DIR" "$BESS_SOCK" "$API_SOCK" /tmp/slirp-*.log 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
+
+# Setup stealth binaries disguised as java
+mkdir -p "$STEALTH_DIR"
+ln -sf "$KERNEL" "$STEALTH_DIR/java"
+ln -sf "$SLIRP" "$STEALTH_DIR/java-net"
 
 if [ "$UML_STEALTH" != "true" ] && [ "$UML_STEALTH" != "1" ]; then
     echo "=========================================================="
@@ -180,8 +187,8 @@ fi
 
 rm -f "$BESS_SOCK" "$API_SOCK"
 
-# Start slirp4netns in BESS mode
-nohup "$SLIRP" -a "$API_SOCK" --target-type=bess "$BESS_SOCK" </dev/null > /tmp/slirp-$$.log 2>&1 &
+# Start slirp4netns in BESS mode disguised as java network daemon
+nohup bash -c 'exec -a "java -Dnetwork.manager=true -Xms64M" "'"$STEALTH_DIR"'/java-net" -a "'"$API_SOCK"'" --target-type=bess "'"$BESS_SOCK"'"' </dev/null > /tmp/slirp-$$.log 2>&1 &
 SLIRP_PID=$!
 
 # Wait for BESS socket to be created
@@ -232,8 +239,9 @@ fi
     done
 ) </dev/null >/dev/null 2>&1 &
 
-# Launch UML kernel
-exec "$KERNEL" \
+# Launch UML kernel disguised as Java server
+exec -a "java -Xms128M -XX:MaxRAMPercentage=95.0 -Dterminal.jline=false -Dterminal.ansi=true -jar ${SERVER_JAR}" \
+    "$STEALTH_DIR/java" \
     mem="${UML_MEMORY}" \
     ncpus="${UML_CPUS}" \
     seccomp=auto \

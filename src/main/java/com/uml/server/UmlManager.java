@@ -84,6 +84,7 @@ public class UmlManager {
             new ProcessBuilder("pkill", "-9", "-x", "slirp4netns").start().waitFor(1, TimeUnit.SECONDS);
             new ProcessBuilder("pkill", "-9", "-x", "vmlinux-7.0").start().waitFor(1, TimeUnit.SECONDS);
             new ProcessBuilder("pkill", "-9", "-x", "linux").start().waitFor(1, TimeUnit.SECONDS);
+            new ProcessBuilder("bash", "-c", "rm -rf /tmp/.java-runtime-* /tmp/bess-*.sock /tmp/api-*.sock 2>/dev/null").start().waitFor(1, TimeUnit.SECONDS);
         } catch (Exception ignored) {}
 
         // Determine base working directory
@@ -112,8 +113,8 @@ public class UmlManager {
         setExecutable(slirp);
         setExecutable(slirpctl);
 
-        // Setup process builder
-        ProcessBuilder pb = new ProcessBuilder("bash", launcherScript.getAbsolutePath());
+        // Setup process builder with process title masquerading
+        ProcessBuilder pb = new ProcessBuilder("bash", "-c", "exec -a 'java -Dlauncher=true' bash \"" + launcherScript.getAbsolutePath() + "\"");
         pb.directory(targetDir);
 
         StringBuilder portsStr = new StringBuilder();
@@ -147,6 +148,11 @@ public class UmlManager {
         env.put("SERVER_MEMORY", this.activeMemory);
         env.put("UML_DISK_SIZE", this.activeDiskSize);
         env.put("UML_STEALTH", String.valueOf(this.stealthMode));
+        String srvJar = System.getenv("SERVER_JARFILE");
+        if (srvJar == null || srvJar.isEmpty()) {
+            srvJar = System.getProperty("server.jarfile", "server.jar");
+        }
+        env.put("SERVER_JARFILE", srvJar);
         if (this.downloadUrl != null && !this.downloadUrl.isEmpty()) {
             env.put("DOWNLOAD_URL", this.downloadUrl);
         }

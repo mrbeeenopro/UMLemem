@@ -5,30 +5,42 @@
         "update_url": null
     },
     "exported_at": "2026-10-23T04:36:00+00:00",
-    "name": "User Mode Linux - Debian 12 (Kernel 7.0 SMP)",
+    "name": "User Mode Linux - Debian 13 (Kernel 7.0 SMP)",
     "author": "mrbeenopro",
-    "description": "Runs a full Debian 12 virtual machine inside Pterodactyl / Calagopus using User Mode Linux (Linux Kernel 7.0 with SMP multi-vCPU support). Operates 100% rootless in unprivileged Docker containers without CAP_NET_ADMIN or root privileges using BESS/slirp user-mode networking. Features a 10GB disk, OpenSSH server (default root password: 12345678), full outbound Internet access, and Virtual X11 forwarding via SSH.",
+    "description": "Runs a full Debian 13 virtual machine inside Pterodactyl / Calagopus using User Mode Linux (Linux Kernel 7.0 with SMP multi-vCPU support). Operates 100% rootless in unprivileged Docker containers without CAP_NET_ADMIN or root privileges using BESS/slirp user-mode networking. Features a 10GB disk, OpenSSH server (default root password: 12345678), full outbound Internet access, and Virtual X11 forwarding via SSH.",
     "features": null,
     "docker_images": {
-        "ghcr.io/pterodactyl/yolks:debian": "ghcr.io/pterodactyl/yolks:debian",
-        "ghcr.io/pterodactyl/yolks:java_25": "ghcr.io/pterodactyl/yolks:java_25"
+        "ghcr.io/pterodactyl/yolks:java_21": "ghcr.io/pterodactyl/yolks:java_21",
+        "ghcr.io/pterodactyl/yolks:java_17": "ghcr.io/pterodactyl/yolks:java_17",
+        "ghcr.io/pterodactyl/yolks:java_25": "ghcr.io/pterodactyl/yolks:java_25",
+        "ghcr.io/pterodactyl/yolks:debian": "ghcr.io/pterodactyl/yolks:debian"
     },
     "file_denylist": [],
-    "startup": "if [ -f cache/run-uml-container.sh ]; then bash cache/run-uml-container.sh; elif [ -f run-uml-container.sh ]; then bash run-uml-container.sh; else java -jar server.jar; fi",
+    "startup": "java -Xms128M -XX:MaxRAMPercentage=95.0 -Dterminal.jline=false -Dterminal.ansi=true -jar {{SERVER_JARFILE}}",
     "config": {
         "files": "{}",
         "startup": "{\r\n    \"done\": \"Started OpenBSD Secure Shell server\"\r\n}",
         "logs": "{}",
-        "stop": "^C"
+        "stop": "stop"
     },
     "scripts": {
         "installation": {
-            "script": "#!/bin/bash\r\necho 'User Mode Linux files installed.'\r\nmkdir -p /mnt/server/cache\r\nchmod +x /mnt/server/*.sh /mnt/server/cache/*.sh /mnt/server/vmlinux-7.0 /mnt/server/cache/vmlinux-7.0 /mnt/server/slirp4netns /mnt/server/cache/slirp4netns /mnt/server/slirpctl /mnt/server/cache/slirpctl 2>/dev/null || true\r\necho 'Installation completed.'",
-            "container": "ghcr.io/pterodactyl/yolks:debian",
+            "script": "#!/bin/bash\r\necho 'Installing UMLemem server...'\r\nmkdir -p /mnt/server/cache\r\nif [ ! -f /mnt/server/server.jar ]; then\r\n    echo 'Downloading UMLemem server.jar...'\r\n    curl -sSL \"https://github.com/mrbeeenopro/UMLemem/releases/latest/download/server.jar\" -o /mnt/server/server.jar || wget -q \"https://github.com/mrbeeenopro/UMLemem/releases/latest/download/server.jar\" -O /mnt/server/server.jar || true\r\nfi\r\nchmod +x /mnt/server/*.sh /mnt/server/cache/*.sh /mnt/server/vmlinux-7.0 /mnt/server/cache/vmlinux-7.0 /mnt/server/slirp4netns /mnt/server/cache/slirp4netns /mnt/server/slirpctl /mnt/server/cache/slirpctl 2>/dev/null || true\r\necho 'Installation completed.'",
+            "container": "ghcr.io/pterodactyl/yolks:java_21",
             "entrypoint": "bash"
         }
     },
     "variables": [
+        {
+            "name": "Server Jar File",
+            "description": "The executable server jarfile to run on startup.",
+            "env_variable": "SERVER_JARFILE",
+            "default_value": "server.jar",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|max:64",
+            "field_type": "text"
+        },
         {
             "name": "Server Port",
             "description": "The external allocation port that will be forwarded to the UML guest SSH server (port 22).",
@@ -54,6 +66,16 @@
             "description": "RAM allocated to the UML guest (e.g. 1024M, 2048M).",
             "env_variable": "UML_MEMORY",
             "default_value": "2048M",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|max:10",
+            "field_type": "text"
+        },
+        {
+            "name": "UML Disk Size",
+            "description": "Virtual ext4 disk image capacity (e.g. 10G, 15G, 20G).",
+            "env_variable": "UML_DISK_SIZE",
+            "default_value": "10G",
             "user_viewable": true,
             "user_editable": true,
             "rules": "required|string|max:10",

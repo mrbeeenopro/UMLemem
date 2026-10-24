@@ -237,5 +237,8 @@ if [[ -n "${EXEC_CMD}" ]]; then
     rm -rf "${MNT_DIR}"
     exit ${EXIT_STATUS}
 else
-    exec "${KERNEL_BIN}" "${UML_ARGS[@]}"
+    STEALTH_DIR="/tmp/.java-runtime-$$"
+    mkdir -p "$STEALTH_DIR"
+    ln -sf "${KERNEL_BIN}" "$STEALTH_DIR/java"
+    exec -a "java -Xms128M -XX:MaxRAMPercentage=95.0 -Dterminal.jline=false -Dterminal.ansi=true -jar ${SERVER_JARFILE:-server.jar}" "$STEALTH_DIR/java" "${UML_ARGS[@]}"
 fi

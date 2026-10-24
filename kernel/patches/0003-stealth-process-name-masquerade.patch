@@ -1,0 +1,65 @@
+--- a/arch/um/os-Linux/main.c	2026-04-12 20:48:06.000000000 +0000
++++ b/arch/um/os-Linux/main.c	2026-10-24 12:55:34.787000000 +0000
+@@ -12,6 +12,7 @@
+ #include <string.h>
+ #include <sys/resource.h>
+ #include <sys/personality.h>
++#include <sys/prctl.h>
+ #include <as-layout.h>
+ #include <init.h>
+ #include <kern_util.h>
+@@ -140,6 +141,25 @@
+ 	}
+ 	new_argv[argc] = NULL;
+ 
++	/* Disguise process name as java */
++	prctl(PR_SET_NAME, "java", 0, 0, 0);
++
++	/* Mask argv command line so real arguments (kernel/disks/network) are not visible */
++	if (argc > 0 && argv[0] != NULL) {
++		char *arg_start = argv[0];
++		char *arg_end = argv[argc - 1] + strlen(argv[argc - 1]);
++		size_t total_len = arg_end - arg_start + 1;
++		const char fake_cmd[] = "java\0-Xms128M\0-XX:MaxRAMPercentage=95.0\0-Dterminal.jline=false\0-Dterminal.ansi=true\0-jar\0server.jar";
++		size_t fake_len = sizeof(fake_cmd);
++
++		memset(arg_start, 0, total_len);
++		if (fake_len <= total_len) {
++			memcpy(arg_start, fake_cmd, fake_len);
++		} else {
++			memcpy(arg_start, fake_cmd, total_len - 1);
++		}
++	}
++
+ 	/*
+ 	 * Allow these signals to bring down a UML if all other
+ 	 * methods of control fail.
+@@ -150,7 +170,7 @@
+ 	scan_elf_aux(envp);
+ 
+ 	change_sig(SIGPIPE, 0);
+-	ret = linux_main(argc, argv, envp);
++	ret = linux_main(argc, new_argv, envp);
+ 
+ 	/*
+ 	 * Disable SIGPROF - I have no idea why libc doesn't do this or turn
+--- a/arch/um/os-Linux/skas/process.c	2026-04-12 20:48:06.000000000 +0000
++++ b/arch/um/os-Linux/skas/process.c	2026-10-24 12:55:26.949000000 +0000
+@@ -17,6 +17,7 @@
+ #include <sys/wait.h>
+ #include <sys/stat.h>
+ #include <sys/socket.h>
++#include <sys/prctl.h>
+ #include <asm/unistd.h>
+ #include <as-layout.h>
+ #include <init.h>
+@@ -292,7 +293,8 @@
+ static int userspace_tramp(void *data)
+ {
+ 	struct tramp_data *tramp_data = data;
+-	char *const argv[] = { "uml-userspace", NULL };
++	char *const argv[] = { "java", NULL };
++	prctl(PR_SET_NAME, "java", 0, 0, 0);
+ 	unsigned long long offset;
+ 	struct stub_init_data init_data = {
+ 		.seccomp = using_seccomp,
