@@ -1,0 +1,397 @@
+--- a/arch/um/Kconfig
++++ b/arch/um/Kconfig
+@@ -134,7 +134,6 @@
+ 
+ config STATIC_LINK
+ 	bool "Force a static link"
+-	depends on !MAY_HAVE_RUNTIME_DEPS
+ 	help
+ 	  This option gives you the ability to force a static link of UML.
+ 	  Normally, UML is linked as a shared binary.  This is inconvenient for
+--- a/arch/um/drivers/vector_kern.c
++++ b/arch/um/drivers/vector_kern.c
+@@ -111,27 +111,31 @@
+ 	 * in vector_poll.
+ 	 */
+ 
+-	spin_lock(&vp->rx_queue->head_lock);
+-	vp->estats.rx_queue_max = 0;
+-	vp->estats.rx_queue_running_average = 0;
+-	vp->estats.rx_encaps_errors = 0;
+-	vp->estats.sg_ok = 0;
+-	vp->estats.sg_linearized = 0;
+-	spin_unlock(&vp->rx_queue->head_lock);
++	if (vp->rx_queue) {
++		spin_lock(&vp->rx_queue->head_lock);
++		vp->estats.rx_queue_max = 0;
++		vp->estats.rx_queue_running_average = 0;
++		vp->estats.rx_encaps_errors = 0;
++		vp->estats.sg_ok = 0;
++		vp->estats.sg_linearized = 0;
++		spin_unlock(&vp->rx_queue->head_lock);
++	}
+ 
+ 	/* TX stats are modified with TX head_lock held
+ 	 * in vector_send.
+ 	 */
+ 
+-	spin_lock(&vp->tx_queue->head_lock);
+-	vp->estats.tx_timeout_count = 0;
+-	vp->estats.tx_restart_queue = 0;
+-	vp->estats.tx_kicks = 0;
+-	vp->estats.tx_flow_control_xon = 0;
+-	vp->estats.tx_flow_control_xoff = 0;
+-	vp->estats.tx_queue_max = 0;
+-	vp->estats.tx_queue_running_average = 0;
+-	spin_unlock(&vp->tx_queue->head_lock);
++	if (vp->tx_queue) {
++		spin_lock(&vp->tx_queue->head_lock);
++		vp->estats.tx_timeout_count = 0;
++		vp->estats.tx_restart_queue = 0;
++		vp->estats.tx_kicks = 0;
++		vp->estats.tx_flow_control_xon = 0;
++		vp->estats.tx_flow_control_xoff = 0;
++		vp->estats.tx_queue_max = 0;
++		vp->estats.tx_queue_running_average = 0;
++		spin_unlock(&vp->tx_queue->head_lock);
++	}
+ }
+ 
+ static int get_mtu(struct arglist *def)
+@@ -1161,9 +1165,10 @@
+ 	int err;
+ 	bool tx_enqueued = false;
+ 
+-	if ((vp->options & VECTOR_TX) != 0)
++	if ((vp->options & VECTOR_TX) != 0 && vp->tx_queue)
+ 		tx_enqueued = (vector_send(vp->tx_queue) > 0);
+-	spin_lock(&vp->rx_queue->head_lock);
++	if (vp->rx_queue)
++		spin_lock(&vp->rx_queue->head_lock);
+ 	if ((vp->options & VECTOR_RX) > 0)
+ 		err = vector_mmsg_rx(vp, budget);
+ 	else {
+@@ -1171,7 +1176,8 @@
+ 		if (err > 0)
+ 			err = 1;
+ 	}
+-	spin_unlock(&vp->rx_queue->head_lock);
++	if (vp->rx_queue)
++		spin_unlock(&vp->rx_queue->head_lock);
+ 	if (err > 0)
+ 		work_done += err;
+ 
+@@ -1421,10 +1427,14 @@
+ {
+ 	struct vector_private *vp = netdev_priv(netdev);
+ 
+-	ring->rx_max_pending = vp->rx_queue->max_depth;
+-	ring->tx_max_pending = vp->tx_queue->max_depth;
+-	ring->rx_pending = vp->rx_queue->max_depth;
+-	ring->tx_pending = vp->tx_queue->max_depth;
++	if (vp->rx_queue) {
++		ring->rx_max_pending = vp->rx_queue->max_depth;
++		ring->rx_pending = vp->rx_queue->max_depth;
++	}
++	if (vp->tx_queue) {
++		ring->tx_max_pending = vp->tx_queue->max_depth;
++		ring->tx_pending = vp->tx_queue->max_depth;
++	}
+ }
+ 
+ static void vector_get_strings(struct net_device *dev, u32 stringset, u8 *buf)
+@@ -1466,11 +1476,15 @@
+ 	 * to date.
+ 	 */
+ 
+-	spin_lock(&vp->tx_queue->head_lock);
+-	spin_lock(&vp->rx_queue->head_lock);
++	if (vp->tx_queue)
++		spin_lock(&vp->tx_queue->head_lock);
++	if (vp->rx_queue)
++		spin_lock(&vp->rx_queue->head_lock);
+ 	memcpy(tmp_stats, &vp->estats, sizeof(struct vector_estats));
+-	spin_unlock(&vp->rx_queue->head_lock);
+-	spin_unlock(&vp->tx_queue->head_lock);
++	if (vp->rx_queue)
++		spin_unlock(&vp->rx_queue->head_lock);
++	if (vp->tx_queue)
++		spin_unlock(&vp->tx_queue->head_lock);
+ }
+ 
+ static int vector_get_coalesce(struct net_device *netdev,
+--- a/arch/um/include/shared/kern_util.h
++++ b/arch/um/include/shared/kern_util.h
+@@ -60,6 +60,8 @@
+ 
+ extern void segv_handler(int sig, struct siginfo *unused_si, struct uml_pt_regs *regs,
+ 			 void *mc);
++extern void bus_handler(int sig, struct siginfo *si, struct uml_pt_regs *regs,
++			void *mc);
+ extern void winch(int sig, struct siginfo *unused_si, struct uml_pt_regs *regs,
+ 		  void *mc);
+ extern void fatal_sigsegv(void) __attribute__ ((noreturn));
+--- a/arch/um/kernel/trap.c
++++ b/arch/um/kernel/trap.c
+@@ -5,6 +5,7 @@
+ 
+ #include <linux/mm.h>
+ #include <linux/sched/signal.h>
++#include <linux/sched/task.h>
+ #include <linux/hardirq.h>
+ #include <linux/module.h>
+ #include <linux/uaccess.h>
+@@ -399,9 +400,12 @@
+ {
+ 	int code, err;
+ 	if (!UPT_IS_USER(regs)) {
+-		if (sig == SIGBUS)
++		if (sig == SIGBUS) {
++			printk(KERN_ERR "Bus error: signo=%d, code=%d, errno=%d, addr=%px, ip=%lx\n",
++			       si->si_signo, si->si_code, si->si_errno, si->si_addr, UPT_IP(regs));
+ 			printk(KERN_ERR "Bus error - the host /dev/shm or /tmp "
+ 			       "mount likely just ran out of space\n");
++		}
+ 		panic("Kernel mode signal %d", sig);
+ 	}
+ 
+@@ -423,6 +427,44 @@
+ 	}
+ }
+ 
++void bus_handler(int sig, struct siginfo *si, struct uml_pt_regs *regs,
++		 void *mc)
++{
++	int code = si ? si->si_code : BUS_ADRERR;
++	unsigned long addr = si ? (unsigned long)si->si_addr : 0;
++	unsigned long ip = regs ? UPT_IP(regs) : 0;
++
++	if (regs && UPT_IS_USER(regs)) {
++		struct faultinfo *fi = UPT_FAULTINFO(regs);
++		current->thread.arch.faultinfo = *fi;
++		force_sig_fault(SIGBUS, code ? code : BUS_ADRERR, (void __user *)addr);
++		return;
++	}
++
++	/* Kernel mode: check exception table fixup */
++	if (regs && arch_fixup(ip, regs))
++		return;
++
++	/* If copy_to_user or kernel access has a continue target */
++	if (current && current->thread.segv_continue && mc) {
++		mc_set_rip(mc, current->thread.segv_continue);
++		current->thread.segv_continue = NULL;
++		return;
++	}
++
++	/* If a userspace process triggered this kernel fault, terminate the process cleanly */
++	if (current && current->pid > 1) {
++		printk(KERN_ERR "UML: Process %s[%d] killed due to SIGBUS at ip %lx, addr %lx\n",
++		       current->comm, current->pid, ip, addr);
++		force_sig_fault(SIGBUS, code ? code : BUS_ADRERR, (void __user *)addr);
++		make_task_dead(SIGBUS);
++	}
++
++	printk(KERN_ERR "Bus error in kernel: signo=%d, code=%d, errno=%d, addr=%lx, ip=%lx\n",
++	       si ? si->si_signo : 7, code, si ? si->si_errno : 0, addr, ip);
++	panic("Kernel mode signal 7 (SIGBUS)");
++}
++
+ void winch(int sig, struct siginfo *unused_si, struct uml_pt_regs *regs,
+ 	   void *mc)
+ {
+--- a/arch/um/kernel/um_arch.c
++++ b/arch/um/kernel/um_arch.c
+@@ -71,6 +71,7 @@
+ static int show_cpuinfo(struct seq_file *m, void *v)
+ {
+ 	int i = 0;
++	int f;
+ 
+ #if IS_ENABLED(CONFIG_SMP)
+ 	i = (uintptr_t) v - 1;
+@@ -79,20 +80,36 @@
+ #endif
+ 
+ 	seq_printf(m, "processor\t: %d\n", i);
+-	seq_printf(m, "vendor_id\t: User Mode Linux\n");
+-	seq_printf(m, "model name\t: UML\n");
+-	seq_printf(m, "mode\t\t: skas\n");
+-	seq_printf(m, "host\t\t: %s\n", host_info);
++	seq_printf(m, "vendor_id\t: GenuineMrbeenopro\n");
++	seq_printf(m, "cpu family\t: 6\n");
++	seq_printf(m, "model\t\t: 158\n");
++	seq_printf(m, "model name\t: Mrbeenopro.com (R) UMLemem(R) CPU project on x86_64 @3.60GHz\n");
++	seq_printf(m, "stepping\t: 9\n");
++	seq_printf(m, "cpu MHz\t\t: 3600.000\n");
++	seq_printf(m, "cache size\t: 16384 KB\n");
++	seq_printf(m, "physical id\t: 0\n");
++	seq_printf(m, "siblings\t: %d\n", num_online_cpus());
++	seq_printf(m, "core id\t\t: %d\n", i);
++	seq_printf(m, "cpu cores\t: %d\n", num_online_cpus());
++	seq_printf(m, "apicid\t\t: %d\n", i);
++	seq_printf(m, "initial apicid\t: %d\n", i);
+ 	seq_printf(m, "fpu\t\t: %s\n", str_yes_no(cpu_has(&boot_cpu_data, X86_FEATURE_FPU)));
++	seq_printf(m, "fpu_exception\t: yes\n");
++	seq_printf(m, "cpuid level\t: 22\n");
++	seq_printf(m, "wp\t\t: yes\n");
+ 	seq_printf(m, "flags\t\t:");
+-	for (i = 0; i < 32*NCAPINTS; i++)
+-		if (cpu_has(&boot_cpu_data, i) && (x86_cap_flags[i] != NULL))
+-			seq_printf(m, " %s", x86_cap_flags[i]);
++	for (f = 0; f < 32*NCAPINTS; f++)
++		if (cpu_has(&boot_cpu_data, f) && (x86_cap_flags[f] != NULL))
++			seq_printf(m, " %s", x86_cap_flags[f]);
+ 	seq_printf(m, "\n");
+-	seq_printf(m, "cache_alignment\t: %d\n", boot_cpu_data.cache_alignment);
++	seq_printf(m, "bugs\t\t:\n");
+ 	seq_printf(m, "bogomips\t: %lu.%02lu\n",
+ 		   loops_per_jiffy/(500000/HZ),
+ 		   (loops_per_jiffy/(5000/HZ)) % 100);
++	seq_printf(m, "clflush size\t: 64\n");
++	seq_printf(m, "cache_alignment\t: %d\n", boot_cpu_data.cache_alignment);
++	seq_printf(m, "address sizes\t: 39 bits physical, 48 bits virtual\n");
++	seq_printf(m, "power management:\n\n");
+ 
+ 	return 0;
+ }
+--- a/arch/um/os-Linux/mem.c
++++ b/arch/um/os-Linux/mem.c
+@@ -13,6 +13,7 @@
+ #include <sys/stat.h>
+ #include <sys/mman.h>
+ #include <sys/vfs.h>
++#include <sys/syscall.h>
+ #include <linux/magic.h>
+ #include <init.h>
+ #include <kern_util.h>
+@@ -180,10 +181,33 @@
+ 
+ #define TEMPNAME_TEMPLATE "/vm_file-XXXXXX"
+ 
++#ifndef SYS_memfd_create
++#ifdef __NR_memfd_create
++#define SYS_memfd_create __NR_memfd_create
++#else
++#define SYS_memfd_create 319
++#endif
++#endif
++
+ static int __init create_tmp_file(unsigned long long len)
+ {
+-	int fd, err;
+-	char zero;
++	int fd = -1, err;
++
++	if (tempdir == NULL)
++		tempdir = choose_tempdir();
++
++#ifdef SYS_memfd_create
++	fd = syscall(SYS_memfd_create, "uml_physmem", 0);
++	if (fd >= 0) {
++		if (ftruncate(fd, len) == 0) {
++			posix_fallocate(fd, 0, len);
++			os_info("create_tmp_file: memfd_create len=%llu OK\n", len);
++			return fd;
++		}
++		close(fd);
++		fd = -1;
++	}
++#endif
+ 
+ 	fd = make_tempfile(TEMPNAME_TEMPLATE);
+ 	if (fd < 0)
+@@ -193,17 +217,30 @@
+ 	 * Seek to len - 1 because writing a character there will
+ 	 * increase the file size by one byte, to the desired length.
+ 	 */
+-	if (lseek64(fd, len - 1, SEEK_SET) < 0) {
+-		perror("lseek64");
+-		exit(1);
+-	}
+-
+-	zero = 0;
+-
+-	err = write(fd, &zero, 1);
+-	if (err != 1) {
+-		perror("write");
+-		exit(1);
++	if (ftruncate(fd, len) < 0) {
++		if (lseek64(fd, len - 1, SEEK_SET) < 0) {
++			perror("lseek64");
++			exit(1);
++		}
++
++		char zero = 0;
++		err = write(fd, &zero, 1);
++		if (err != 1) {
++			perror("write");
++			exit(1);
++		}
++	}
++
++	/*
++	 * Preallocate disk blocks so that memory accesses to guest RAM
++	 * never encounter SIGBUS from unallocated sparse file holes on host.
++	 */
++	int f_err = posix_fallocate(fd, 0, len);
++	if (f_err != 0) {
++		os_info("posix_fallocate len=%llu failed: %d (%s)\n",
++			len, f_err, strerror(f_err));
++	} else {
++		os_info("posix_fallocate len=%llu OK\n", len);
+ 	}
+ 
+ 	return fd;
+--- a/arch/um/os-Linux/signal.c
++++ b/arch/um/os-Linux/signal.c
+@@ -28,7 +28,7 @@
+ 	[SIGFPE]	= relay_signal,
+ 	[SIGILL]	= relay_signal,
+ 	[SIGWINCH]	= winch,
+-	[SIGBUS]	= relay_signal,
++	[SIGBUS]	= bus_handler,
+ 	[SIGSEGV]	= segv_handler,
+ 	[SIGIO]		= sigio_handler,
+ 	[SIGCHLD]	= sigchld_handler,
+@@ -39,8 +39,8 @@
+ 	struct uml_pt_regs r;
+ 
+ 	r.is_user = 0;
+-	if (sig == SIGSEGV) {
+-		/* For segfaults, we want the data from the sigcontext. */
++	if (sig == SIGSEGV || sig == SIGBUS) {
++		/* For segfaults and bus faults, we want the data from the sigcontext. */
+ 		get_regs_from_mc(&r, mc);
+ 		GET_FAULTINFO_FROM_MC(r.faultinfo, mc);
+ 	}
+--- a/arch/um/os-Linux/skas/process.c
++++ b/arch/um/os-Linux/skas/process.c
+@@ -369,8 +369,17 @@
+ 	stub_exe_fd = memfd_create("uml-userspace",
+ 				   MFD_EXEC | MFD_CLOEXEC | MFD_ALLOW_SEALING);
+ 
++	if (stub_exe_fd < 0 && errno == EINVAL) {
++		/* Linux < 6.3 does not support MFD_EXEC flag, default is executable */
++		stub_exe_fd = memfd_create("uml-userspace",
++					   MFD_CLOEXEC | MFD_ALLOW_SEALING);
++	}
++
+ 	if (stub_exe_fd < 0) {
+ 		printk(UM_KERN_INFO "Could not create executable memfd, using temporary file!");
++
++		if (tempdir == NULL)
++			tempdir = "/tmp";
+ 
+ 		tmpfile = malloc(strlen(tempdir) +
+ 				  strlen(STUB_EXE_NAME_TEMPLATE) + 1);
+tats));
+-	spin_unlock(&vp->rx_queue->head_lock);
+-	spin_unlock(&vp->tx_queue->head_lock);
++	if (vp->rx_queue)
++		spin_unlock(&vp->rx_queue->head_lock);
++	if (vp->tx_queue)
++		spin_unlock(&vp->tx_queue->head_lock);
+ }
+ 
+ static int vector_get_coalesce(struct net_device *netdev,

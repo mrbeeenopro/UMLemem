@@ -1,0 +1,85 @@
+name: Build UMLemem Debian Distro
+
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: 'Debian suite (e.g. trixie, bookworm)'
+        required: false
+        default: 'trixie'
+      disk_size_mb:
+        description: 'Sparse disk size in MB'
+        required: false
+        default: '2048'
+      publish_release:
+        description: 'Publish/Update to GitHub Release'
+        type: boolean
+        required: false
+        default: false
+      tag_name:
+        description: 'Target release tag (e.g. v1.0.6)'
+        required: false
+        default: ''
+  push:
+    paths:
+      - 'distro/**'
+      - '.github/workflows/build-distro.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build-distro:
+    name: Build Debian Distro Rootfs Image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Distro Build Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            debootstrap e2fsprogs tar gzip curl
+
+      - name: Bootstrap and Configure Debian Distro
+        env:
+          SUITE: ${{ inputs.suite || 'trixie' }}
+          DISK_SIZE_MB: ${{ inputs.disk_size_mb || '2048' }}
+        run: |
+          mkdir -p output
+          chmod +x distro/build-debian-distro.sh
+          sudo -E distro/build-debian-distro.sh output
+
+      - name: Verify Rootfs & Bundle
+        run: |
+          test -s output/debian-rootfs.ext4 || { echo "ERROR: debian-rootfs.ext4 missing"; exit 1; }
+          file output/debian-rootfs.ext4
+          ls -lh output/
+
+          if [ -f output/session.dat ]; then
+            tar -tf output/session.dat | grep "debian-rootfs.ext4" || { echo "ERROR: debian-rootfs.ext4 missing from session.dat"; exit 1; }
+            echo "session.dat verified successfully."
+          fi
+
+      - name: Archive Built Distro Images
+        uses: actions/upload-artifact@v4
+        with:
+          name: uml-distro-images
+          path: |
+            output/debian-rootfs.ext4
+            output/session.dat
+          if-no-files-found: warn
+
+      - name: Attach to GitHub Release (If Requested)
+        if: ${{ inputs.publish_release == true && inputs.tag_name != '' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ inputs.tag_name }}"
+          echo "Uploading distro assets to release $TAG..."
+          ASSETS=()
+          [ -f output/session.dat ] && ASSETS+=(output/session.dat)
+          if [ ${#ASSETS[@]} -gt 0 ]; then
+            gh release upload "$TAG" "${ASSETS[@]}" --clobber
+          fi

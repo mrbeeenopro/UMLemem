@@ -1,0 +1,65 @@
+name: Build UMLemem Kernel
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: 'Publish/Update to GitHub Release'
+        type: boolean
+        required: false
+        default: false
+      tag_name:
+        description: 'Target release tag (e.g. v1.0.6)'
+        required: false
+        default: ''
+  push:
+    paths:
+      - 'kernel/**'
+      - '.github/workflows/build-kernel.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build-kernel:
+    name: Compile UML Kernel 7.0 (SMP & Docker)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Kernel Build Toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential bison flex libssl-dev libelf-dev bc lbzip2 linux-source-7.0.0
+
+      - name: Build UML Kernel Binary
+        run: |
+          mkdir -p output
+          chmod +x kernel/build-kernel.sh
+          kernel/build-kernel.sh output
+
+      - name: Verify Kernel Binary & CPU Branding
+        run: |
+          test -s output/vmlinux-7.0 || { echo "ERROR: output/vmlinux-7.0 not found"; exit 1; }
+          file output/vmlinux-7.0
+          strings output/vmlinux-7.0 | grep -F "GenuineMrbeenopro" || { echo "ERROR: GenuineMrbeenopro branding missing"; exit 1; }
+          strings output/vmlinux-7.0 | grep -F "Mrbeenopro.com (R) UMLemem(R) CPU project" || { echo "ERROR: Custom CPU model name missing"; exit 1; }
+          echo "✅ Kernel 7.0 successfully compiled and verified!"
+
+      - name: Archive Kernel Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vmlinux-7.0
+          path: output/vmlinux-7.0
+          if-no-files-found: error
+
+      - name: Attach to GitHub Release (If Requested)
+        if: ${{ inputs.publish_release == true && inputs.tag_name != '' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ inputs.tag_name }}"
+          echo "Uploading vmlinux-7.0 to release $TAG..."
+          gh release upload "$TAG" output/vmlinux-7.0 --clobber

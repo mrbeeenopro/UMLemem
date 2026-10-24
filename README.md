@@ -157,6 +157,29 @@ When running `server.jar`, the interactive console supports:
 
 ---
 
+## 🛠️ Kernel & Debian Distro Build Pipelines (Local & GitHub Actions)
+
+The repository provides automated build scripts and GitHub Actions workflows to compile the Linux 7.0 UML kernel from source and bootstrap the custom Debian 13 (Trixie) distro image from scratch:
+
+### 1. Compile Kernel from Source:
+- **Script**: [`kernel/build-kernel.sh`](kernel/build-kernel.sh)
+- **Configuration**: [`kernel/config-7.0`](kernel/config-7.0) (SMP, Docker, bridge, veth, netfilter, BPF)
+- **Patches**: [`kernel/patches/0001-umlemem-kernel-7.0-smp-docker-customcpu.patch`](kernel/patches/0001-umlemem-kernel-7.0-smp-docker-customcpu.patch)
+- **GitHub Action**: [`.github/workflows/build-kernel.yml`](.github/workflows/build-kernel.yml) (Runs in CI or triggerable via `workflow_dispatch`)
+```bash
+./kernel/build-kernel.sh cache/
+```
+
+### 2. Build Debian 13 Distro Image & `session.dat`:
+- **Script**: [`distro/build-debian-distro.sh`](distro/build-debian-distro.sh)
+- **GitHub Action**: [`.github/workflows/build-distro.yml`](.github/workflows/build-distro.yml) (Runs in CI or triggerable via `workflow_dispatch`)
+- Generates sparse `debian-rootfs.ext4` and bundles with kernel into `session.dat`:
+```bash
+sudo ./distro/build-debian-distro.sh cache/
+```
+
+---
+
 ## 🚀 GitHub Actions CI/CD
 
 Automated releases are built via [`.github/workflows/build-release.yml`](.github/workflows/build-release.yml):

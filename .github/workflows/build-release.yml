@@ -40,6 +40,8 @@ jobs:
           bash -n cache/run-uml.sh
           bash -n src/main/resources/scripts/run-uml-container.sh
           bash -n src/main/resources/scripts/run-uml.sh
+          bash -n kernel/build-kernel.sh
+          bash -n distro/build-debian-distro.sh
           echo "All shell scripts passed syntax validation."
 
       - name: Validate Egg JSON Specification
