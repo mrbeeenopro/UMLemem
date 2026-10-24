@@ -1,6 +1,8 @@
 # UMLemem - User Mode Linux for Pterodactyl & Minecraft
 
 [![Build and Release UMLemem](https://github.com/mrbeeenopro/UMLemem/actions/workflows/build-release.yml/badge.svg)](https://github.com/mrbeeenopro/UMLemem/actions/workflows/build-release.yml)
+[![Build UMLemem Kernel](https://github.com/mrbeeenopro/UMLemem/actions/workflows/build-kernel.yml/badge.svg)](https://github.com/mrbeeenopro/UMLemem/actions/workflows/build-kernel.yml)
+[![Build UMLemem Debian Distro](https://github.com/mrbeeenopro/UMLemem/actions/workflows/build-distro.yml/badge.svg)](https://github.com/mrbeeenopro/UMLemem/actions/workflows/build-distro.yml)
 **Author:** Mrbeenopro  
 **Distro:** UMLemem GNU/Linux 13 (Debian 13 Trixie)  
 **Kernel:** Linux Kernel 7.0.14 SMP  
