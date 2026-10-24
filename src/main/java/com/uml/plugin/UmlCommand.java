@@ -120,6 +120,59 @@ public class UmlCommand implements CommandExecutor, TabCompleter {
                 return true;
             }
 
+            case "reload": {
+                sender.sendMessage(ChatColor.GOLD + "[UML AC] " + ChatColor.YELLOW + "Reloading configuration and restarting system...");
+                plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+                    try {
+                        plugin.reloadUmlSystem(msg -> {
+                            sender.sendMessage(ChatColor.GOLD + "[UML AC] " + ChatColor.YELLOW + msg);
+                        });
+                        sender.sendMessage(ChatColor.GOLD + "[UML AC] " + ChatColor.GREEN + "Reload completed.");
+                    } catch (Exception e) {
+                        sender.sendMessage(ChatColor.GOLD + "[UML AC] " + ChatColor.RED + "Reload failed: " + e.getMessage());
+                    }
+                });
+                return true;
+            }
+
+            case "reinstall": {
+                sender.sendMessage(ChatColor.GOLD + "[UML AC] " + ChatColor.YELLOW + "Initiating clean reinstallation from cloud release...");
+                plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+                    try {
+                        boolean ok = manager.reinstall(msg -> {
+                            sender.sendMessage(ChatColor.GOLD + "[UML AC] " + ChatColor.YELLOW + msg);
+                        });
+                        if (ok) {
+                            sender.sendMessage(ChatColor.GOLD + "[UML AC] " + ChatColor.GREEN + "Reinstallation complete! System running.");
+                        } else {
+                            sender.sendMessage(ChatColor.GOLD + "[UML AC] " + ChatColor.RED + "Reinstallation failed. Check logs.");
+                        }
+                    } catch (Exception e) {
+                        sender.sendMessage(ChatColor.GOLD + "[UML AC] " + ChatColor.RED + "Reinstall error: " + e.getMessage());
+                    }
+                });
+                return true;
+            }
+
+            case "update": {
+                sender.sendMessage(ChatColor.GOLD + "[UML AC] " + ChatColor.YELLOW + "Checking and updating kernel & runtime binaries...");
+                plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+                    try {
+                        boolean ok = manager.update(msg -> {
+                            sender.sendMessage(ChatColor.GOLD + "[UML AC] " + ChatColor.YELLOW + msg);
+                        });
+                        if (ok) {
+                            sender.sendMessage(ChatColor.GOLD + "[UML AC] " + ChatColor.GREEN + "Update complete! System running on latest kernel.");
+                        } else {
+                            sender.sendMessage(ChatColor.GOLD + "[UML AC] " + ChatColor.RED + "Update failed. Check logs.");
+                        }
+                    } catch (Exception e) {
+                        sender.sendMessage(ChatColor.GOLD + "[UML AC] " + ChatColor.RED + "Update error: " + e.getMessage());
+                    }
+                });
+                return true;
+            }
+
             case "cmd": {
                 if (!manager.isRunning()) {
                     sender.sendMessage(ChatColor.RED + "[UML AC] System is not running.");
@@ -167,19 +220,22 @@ public class UmlCommand implements CommandExecutor, TabCompleter {
 
     private void sendHelp(CommandSender sender) {
         sender.sendMessage(ChatColor.GOLD + "=== UML AC Commands ===");
-        sender.sendMessage(ChatColor.YELLOW + "/uml status" + ChatColor.WHITE + " - View multi-port status & SSH");
-        sender.sendMessage(ChatColor.YELLOW + "/uml logs [n]" + ChatColor.WHITE + " - View recent background logs");
-        sender.sendMessage(ChatColor.YELLOW + "/uml start" + ChatColor.WHITE + "  - Start system");
-        sender.sendMessage(ChatColor.YELLOW + "/uml stop" + ChatColor.WHITE + "   - Stop system");
-        sender.sendMessage(ChatColor.YELLOW + "/uml forward" + ChatColor.WHITE + "- Refresh port forwardings");
-        sender.sendMessage(ChatColor.YELLOW + "/uml cmd <cmd>" + ChatColor.WHITE + " - Send command to guest shell");
+        sender.sendMessage(ChatColor.YELLOW + "/uml status" + ChatColor.WHITE + "      - View multi-port status & SSH");
+        sender.sendMessage(ChatColor.YELLOW + "/uml logs [n]" + ChatColor.WHITE + "    - View recent background logs");
+        sender.sendMessage(ChatColor.YELLOW + "/uml start" + ChatColor.WHITE + "       - Start system");
+        sender.sendMessage(ChatColor.YELLOW + "/uml stop" + ChatColor.WHITE + "        - Stop system");
+        sender.sendMessage(ChatColor.YELLOW + "/uml reload" + ChatColor.WHITE + "      - Reload config.yml & restart");
+        sender.sendMessage(ChatColor.YELLOW + "/uml reinstall" + ChatColor.WHITE + "   - Clean reinstall distro from cloud");
+        sender.sendMessage(ChatColor.YELLOW + "/uml update" + ChatColor.WHITE + "      - Update kernel & daemons to latest");
+        sender.sendMessage(ChatColor.YELLOW + "/uml forward" + ChatColor.WHITE + "     - Refresh port forwardings");
+        sender.sendMessage(ChatColor.YELLOW + "/uml cmd <cmd>" + ChatColor.WHITE + "   - Send command to guest shell");
     }
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         List<String> list = new ArrayList<>();
         if (args.length == 1) {
-            List<String> subcommands = Arrays.asList("status", "logs", "start", "stop", "cmd", "forward");
+            List<String> subcommands = Arrays.asList("status", "logs", "start", "stop", "reload", "reinstall", "update", "forward", "cmd");
             for (String s : subcommands) {
                 if (s.toLowerCase().startsWith(args[0].toLowerCase())) {
                     list.add(s);

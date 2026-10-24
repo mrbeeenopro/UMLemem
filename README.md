@@ -124,6 +124,10 @@ archive_path: "world/data/session.dat"
   ```
 - `/uml logs [n]`: View the last `n` lines of background VM logs.
 - `/uml start` / `/uml stop`: Start or gracefully stop the background VM.
+- `/uml reload`: Hot-reload `config.yml` settings (ports, vcpu, ram, disk) and restart instance.
+- `/uml reinstall`: Clean reinstall from cloud release (wipes cache and downloads fresh `session.dat`).
+- `/uml update`: Download & update kernel (`vmlinux-7.0`) and network daemons to latest release while preserving rootfs files and containers.
+- `/uml forward`: Refresh and re-apply port forwardings.
 - `/uml cmd <command>`: Execute a shell command directly in the VM.
 
 ---
@@ -135,6 +139,20 @@ For standard Pterodactyl Java / Minecraft egg setups where the panel executes `j
 ```bash
 java -Xms128M -Xmx1024M -jar server.jar
 ```
+
+### CLI Startup Options:
+- `java -jar server.jar`: Standard boot with environment configuration.
+- `java -jar server.jar update`: Download latest kernel & network daemons before booting.
+- `java -jar server.jar reinstall`: Wipe cache, download fresh `session.dat`, and start fresh distro.
+
+### Console Commands:
+When running `server.jar`, the interactive console supports:
+- `status`: Display VM health, allocated resources, uptime, and active port forwards.
+- `reload`: Reload configuration and restart the UML process.
+- `update`: Fetch and update kernel & daemons from latest release and restart.
+- `reinstall`: Wipe cache and perform clean cloud reinstallation.
+- `stop` / `exit`: Gracefully shut down UML and terminate.
+- Or any bash command directly sent to the guest terminal.
 
 ---
 

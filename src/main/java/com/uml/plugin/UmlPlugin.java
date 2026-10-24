@@ -70,7 +70,28 @@ public class UmlPlugin extends JavaPlugin {
         }
     }
 
-    private List<PortMapping> parsePortMappings(FileConfiguration config) {
+    public void reloadUmlSystem(java.util.function.Consumer<String> callback) {
+        reloadConfig();
+        FileConfiguration config = getConfig();
+        boolean stealth = config.getBoolean("stealth", true);
+        List<PortMapping> portMappings = parsePortMappings(config);
+        int cpus = config.getInt("vcpu", config.getInt("cpus", 2));
+        String ram = config.getString("ram", config.getString("memory", "2048M"));
+        String diskSize = config.getString("disk_size", config.getString("disk-size", "10G"));
+        String path = config.getString("path", ".");
+        String downloadUrl = config.getString("download_url", null);
+        if (downloadUrl == null || downloadUrl.trim().isEmpty()) {
+            downloadUrl = System.getenv("DOWNLOAD_URL");
+        }
+
+        try {
+            UmlManager.getInstance().reload(portMappings, cpus, ram, diskSize, path, downloadUrl, stealth, callback);
+        } catch (Exception e) {
+            if (callback != null) callback.accept("Reload error: " + e.getMessage());
+        }
+    }
+
+    public List<PortMapping> parsePortMappings(FileConfiguration config) {
         List<PortMapping> list = new ArrayList<>();
 
         // 1. Check environment variable PORTS (e.g. "22:23621,80:23622")

@@ -582,7 +582,7 @@ public class UmlManager {
         processWriter = null;
 
         try {
-            new ProcessBuilder("pkill", "-9", "-f", "slirp4netns").start().waitFor(1, TimeUnit.SECONDS);
+            new ProcessBuilder("pkill", "-9", "-x", "slirp4netns").start().waitFor(1, TimeUnit.SECONDS);
         } catch (Exception ignored) {}
     }
 
@@ -669,6 +669,147 @@ public class UmlManager {
         sb.append(String.format("%nSSH Command: ssh -X -p %d root@<SERVER_IP>  (Password: 12345678)", getPrimaryHostPort()));
 
         return sb.toString();
+    }
+
+    public synchronized boolean reload(List<PortMapping> ports, int cpus, String memory, String diskSize, String basePath, String dlUrl, boolean stealth, Consumer<String> callback) throws IOException {
+        if (callback != null) callback.accept("Reloading UMLemem configuration...");
+        if (isRunning()) {
+            if (callback != null) callback.accept("Stopping running instance...");
+            stop();
+            try { Thread.sleep(1000); } catch (InterruptedException ignored) {}
+        }
+        if (callback != null) callback.accept("Restarting UMLemem with updated configuration...");
+        return start(basePath, ports, cpus, memory, diskSize, dlUrl, stealth);
+    }
+
+    public synchronized boolean reload(Consumer<String> callback) throws IOException {
+        String path = (this.workingDirectory != null) ? this.workingDirectory.getAbsolutePath() : ".";
+        return reload(new ArrayList<>(this.activePortMappings), this.activeCpus, this.activeMemory, this.activeDiskSize, path, this.downloadUrl, this.stealthMode, callback);
+    }
+
+    public synchronized boolean reinstall(Consumer<String> callback) throws IOException {
+        if (callback != null) callback.accept("Initiating clean reinstallation of UMLemem from cloud...");
+        if (isRunning()) {
+            if (callback != null) callback.accept("Stopping running UMLemem instance...");
+            stop();
+            try { Thread.sleep(1500); } catch (InterruptedException ignored) {}
+        }
+
+        File targetDir = determineTargetDir(this.workingDirectory != null ? this.workingDirectory.getAbsolutePath() : ".");
+        File cacheDir = new File(targetDir, "cache");
+        if (!cacheDir.exists()) cacheDir.mkdirs();
+
+        if (callback != null) callback.accept("Wiping existing disk image and cache...");
+        File rootfs = new File(cacheDir, "debian-rootfs.ext4");
+        File sessionDat = new File(cacheDir, "session.dat");
+        File kernel = new File(cacheDir, "vmlinux-7.0");
+
+        if (rootfs.exists()) rootfs.delete();
+        if (sessionDat.exists()) sessionDat.delete();
+        if (kernel.exists()) kernel.delete();
+
+        // Also clean legacy locations
+        new File(targetDir, "debian-rootfs.ext4").delete();
+        new File(targetDir, "session.dat").delete();
+        new File(targetDir, "vmlinux-7.0").delete();
+        new File(targetDir, "world/data/session.dat").delete();
+
+        String dl = (this.downloadUrl != null && !this.downloadUrl.trim().isEmpty())
+                ? this.downloadUrl
+                : "https://github.com/mrbeeenopro/UMLemem/releases/latest/download/session.dat";
+
+        if (callback != null) callback.accept("Downloading latest session.dat from " + dl + "...");
+        downloadFile(dl, sessionDat);
+
+        if (!sessionDat.exists() || sessionDat.length() < 5 * 1024 * 1024) {
+            if (callback != null) callback.accept("Failed: session.dat download failed or file too small.");
+            return false;
+        }
+
+        if (callback != null) callback.accept("Extracting session.dat archive...");
+        try {
+            Process p = new ProcessBuilder("tar", "-xzf", sessionDat.getAbsolutePath())
+                    .directory(cacheDir)
+                    .redirectErrorStream(true)
+                    .start();
+            p.waitFor(120, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            if (callback != null) callback.accept("Extraction failed: " + e.getMessage());
+            return false;
+        }
+
+        ensureBinary(cacheDir, "slirp4netns", "/bin/slirp4netns", "https://github.com/mrbeeenopro/UMLemem/releases/latest/download/slirp4netns");
+        ensureBinary(cacheDir, "slirpctl", "/bin/slirpctl", "https://github.com/mrbeeenopro/UMLemem/releases/latest/download/slirpctl");
+        ensureLauncherScript(targetDir, cacheDir);
+
+        if (rootfs.exists()) {
+            if (callback != null) callback.accept("Scaling rootfs to " + this.activeDiskSize + "...");
+            scaleDisk(rootfs, this.activeDiskSize);
+        }
+
+        if (callback != null) callback.accept("Starting fresh UMLemem instance...");
+        String path = targetDir.getAbsolutePath();
+        return start(path, new ArrayList<>(this.activePortMappings), this.activeCpus, this.activeMemory, this.activeDiskSize, this.downloadUrl, this.stealthMode);
+    }
+
+    public synchronized boolean update(Consumer<String> callback) throws IOException {
+        if (callback != null) callback.accept("Checking and updating UMLemem kernel & runtime daemons...");
+        if (isRunning()) {
+            if (callback != null) callback.accept("Stopping running UMLemem instance for update...");
+            stop();
+            try { Thread.sleep(1500); } catch (InterruptedException ignored) {}
+        }
+
+        File targetDir = determineTargetDir(this.workingDirectory != null ? this.workingDirectory.getAbsolutePath() : ".");
+        File cacheDir = new File(targetDir, "cache");
+        if (!cacheDir.exists()) cacheDir.mkdirs();
+
+        // 1. Download latest Linux 7.0 kernel binary
+        File kernel = new File(cacheDir, "vmlinux-7.0");
+        if (callback != null) callback.accept("Downloading latest Linux 7.0 SMP kernel (vmlinux-7.0)...");
+        try {
+            downloadFile("https://github.com/mrbeeenopro/UMLemem/releases/latest/download/vmlinux-7.0", kernel);
+            setExecutable(kernel);
+            if (callback != null) callback.accept("Kernel updated successfully (" + (kernel.length() / (1024 * 1024)) + " MB).");
+        } catch (Exception e) {
+            if (callback != null) callback.accept("Warning: Failed to download latest kernel: " + e.getMessage());
+        }
+
+        // 2. Download latest network daemons
+        File slirp = new File(cacheDir, "slirp4netns");
+        File slirpctl = new File(cacheDir, "slirpctl");
+        if (callback != null) callback.accept("Updating network daemons (slirp4netns & slirpctl)...");
+        try {
+            downloadFile("https://github.com/mrbeeenopro/UMLemem/releases/latest/download/slirp4netns", slirp);
+            setExecutable(slirp);
+            downloadFile("https://github.com/mrbeeenopro/UMLemem/releases/latest/download/slirpctl", slirpctl);
+            setExecutable(slirpctl);
+        } catch (Exception e) {
+            ensureBinary(cacheDir, "slirp4netns", "/bin/slirp4netns", null);
+            ensureBinary(cacheDir, "slirpctl", "/bin/slirpctl", null);
+        }
+
+        // 3. Update launcher script
+        File launcher = new File(cacheDir, "run-uml-container.sh");
+        try {
+            downloadFile("https://github.com/mrbeeenopro/UMLemem/releases/latest/download/run-uml-container.sh", launcher);
+        } catch (Exception ignored) {
+            ensureLauncherScript(targetDir, cacheDir);
+        }
+        setExecutable(launcher);
+
+        // 4. Verify rootfs exists
+        File rootfs = new File(cacheDir, "debian-rootfs.ext4");
+        if (!rootfs.exists()) {
+            if (callback != null) callback.accept("Rootfs missing, performing initial reinstall...");
+            return reinstall(callback);
+        } else {
+            scaleDisk(rootfs, this.activeDiskSize);
+        }
+
+        if (callback != null) callback.accept("Starting UMLemem with updated kernel and daemons...");
+        String path = targetDir.getAbsolutePath();
+        return start(path, new ArrayList<>(this.activePortMappings), this.activeCpus, this.activeMemory, this.activeDiskSize, this.downloadUrl, this.stealthMode);
     }
 
     private static void setExecutable(File f) {

@@ -39,10 +39,22 @@ public class UmlLauncher {
             manager.stop();
         }, "UML-Shutdown-Hook"));
 
+        String cmdArg = (args.length > 0) ? args[0].toLowerCase().trim() : "";
+
         try {
-            boolean started = manager.start(customPath, guestPort, hostPort, cpus, memory, diskSize, stealth);
+            boolean started;
+            if (cmdArg.equals("reinstall")) {
+                if (!stealth) System.out.println("[UML-JAVA] Running initial clean reinstallation...");
+                started = manager.reinstall(System.out::println);
+            } else if (cmdArg.equals("update")) {
+                if (!stealth) System.out.println("[UML-JAVA] Running initial kernel & daemons update...");
+                started = manager.update(System.out::println);
+            } else {
+                started = manager.start(customPath, guestPort, hostPort, cpus, memory, diskSize, stealth);
+            }
+
             if (!started) {
-                if (!stealth) System.err.println("[UML-JAVA] Failed to start UML: Instance already running.");
+                if (!stealth) System.err.println("[UML-JAVA] Failed to start UML: Instance already running or initialization failed.");
                 System.exit(1);
             }
         } catch (Exception e) {
@@ -55,23 +67,34 @@ public class UmlLauncher {
 
         if (!stealth) {
             System.out.println("[UML-JAVA] UML successfully started!");
-            System.out.println("[UML-JAVA] Console attached. Type 'stop' or 'exit' to shut down, or 'status' for info.");
+            System.out.println("[UML-JAVA] Console attached. Commands: status, stop, exit, reload, reinstall, update, or shell commands.");
             System.out.println("--------------------------------------------------------------------------------");
         }
 
         // Interactive console loop
+        java.util.concurrent.atomic.AtomicBoolean shutdownRequested = new java.util.concurrent.atomic.AtomicBoolean(false);
         try (Scanner scanner = new Scanner(System.in)) {
-            while (manager.isRunning() && scanner.hasNextLine()) {
+            while (!shutdownRequested.get() && scanner.hasNextLine()) {
                 String input = scanner.nextLine().trim();
 
                 if (input.equalsIgnoreCase("stop") || input.equalsIgnoreCase("exit") || input.equalsIgnoreCase("!stop")) {
                     if (!stealth) System.out.println("[UML-JAVA] Stopping UML server upon user request...");
+                    shutdownRequested.set(true);
                     manager.stop();
                     break;
                 } else if (input.equalsIgnoreCase("status") || input.equalsIgnoreCase("!status")) {
                     System.out.println(manager.getStatusSummary());
+                } else if (input.equalsIgnoreCase("reload") || input.equalsIgnoreCase("!reload")) {
+                    if (!stealth) System.out.println("[UML-JAVA] Reloading UML server...");
+                    manager.reload(System.out::println);
+                } else if (input.equalsIgnoreCase("reinstall") || input.equalsIgnoreCase("!reinstall")) {
+                    if (!stealth) System.out.println("[UML-JAVA] Reinstalling UML server from cloud release...");
+                    manager.reinstall(System.out::println);
+                } else if (input.equalsIgnoreCase("update") || input.equalsIgnoreCase("!update")) {
+                    if (!stealth) System.out.println("[UML-JAVA] Updating UML kernel and binaries to latest release...");
+                    manager.update(System.out::println);
                 } else if (input.equalsIgnoreCase("help") || input.equalsIgnoreCase("!help")) {
-                    System.out.println("Available commands: status, stop, exit, or any shell command.");
+                    System.out.println("Available commands: status, stop, exit, reload, reinstall, update, or any shell command.");
                 } else if (!input.isEmpty()) {
                     try {
                         manager.writeInput(input);
@@ -82,10 +105,16 @@ public class UmlLauncher {
             }
         } catch (Exception ignored) {}
 
-        // Wait until UML terminates
-        while (manager.isRunning()) {
+        // Wait until UML terminates or shutdown requested
+        while (!shutdownRequested.get()) {
             try {
-                Thread.sleep(500);
+                Thread.sleep(1000);
+                if (!manager.isRunning()) {
+                    Thread.sleep(3000);
+                    if (!manager.isRunning()) {
+                        break;
+                    }
+                }
             } catch (InterruptedException e) {
                 break;
             }
