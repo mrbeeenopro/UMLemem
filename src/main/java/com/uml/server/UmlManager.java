@@ -209,6 +209,10 @@ public class UmlManager {
         new File(targetDir, "run-uml.sh").delete();
         new File(targetDir, "linux").delete();
 
+        // Ensure slirp network binaries exist (extract from JAR resources or download)
+        ensureBinary(cacheDir, "slirp4netns", "/bin/slirp4netns", "https://github.com/mrbeeenopro/UMLemem/releases/download/v1.0.0/slirp4netns");
+        ensureBinary(cacheDir, "slirpctl", "/bin/slirpctl", "https://github.com/mrbeeenopro/UMLemem/releases/download/v1.0.0/slirpctl");
+
         if (rootfs.exists() && kernel.exists()) {
             setExecutable(kernel);
             setExecutable(slirp);
@@ -264,9 +268,44 @@ public class UmlManager {
                 setExecutable(extractedSlirpctl);
             }
 
+            // Always guarantee slirp binaries are present and executable
+            ensureBinary(cacheDir, "slirp4netns", "/bin/slirp4netns", "https://github.com/mrbeeenopro/UMLemem/releases/download/v1.0.0/slirp4netns");
+            ensureBinary(cacheDir, "slirpctl", "/bin/slirpctl", "https://github.com/mrbeeenopro/UMLemem/releases/download/v1.0.0/slirpctl");
+
             if (rootfs.exists()) {
                 scaleDisk(rootfs, this.activeDiskSize);
             }
+        }
+    }
+
+    private void ensureBinary(File cacheDir, String fileName, String resourcePath, String fallbackUrl) {
+        File file = new File(cacheDir, fileName);
+        if (file.exists() && file.length() > 1000) {
+            setExecutable(file);
+            return;
+        }
+
+        // 1. Try extracting from embedded JAR resources
+        try (InputStream in = getClass().getResourceAsStream(resourcePath)) {
+            if (in != null) {
+                try (OutputStream out = new FileOutputStream(file)) {
+                    byte[] buf = new byte[8192];
+                    int n;
+                    while ((n = in.read(buf)) != -1) {
+                        out.write(buf, 0, n);
+                    }
+                }
+                setExecutable(file);
+                return;
+            }
+        } catch (Exception ignored) {}
+
+        // 2. Try downloading from fallback URL
+        if (fallbackUrl != null && !fallbackUrl.isEmpty()) {
+            try {
+                downloadFile(fallbackUrl, file);
+                setExecutable(file);
+            } catch (Exception ignored) {}
         }
     }
 

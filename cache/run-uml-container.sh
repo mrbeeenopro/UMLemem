@@ -54,6 +54,18 @@ KERNEL="${KERNEL:-$CACHE_DIR/vmlinux-7.0}"
 SLIRP="${SLIRP:-$CACHE_DIR/slirp4netns}"
 SLIRPCTL="${SLIRPCTL:-$CACHE_DIR/slirpctl}"
 
+# Auto-download slirp binaries if missing
+if [ ! -f "$SLIRP" ] || [ ! -s "$SLIRP" ]; then
+    mkdir -p "$CACHE_DIR"
+    curl -sSL "https://github.com/mrbeeenopro/UMLemem/releases/download/v1.0.0/slirp4netns" -o "$SLIRP" 2>/dev/null || wget -q "https://github.com/mrbeeenopro/UMLemem/releases/download/v1.0.0/slirp4netns" -O "$SLIRP" 2>/dev/null || true
+    chmod +x "$SLIRP" 2>/dev/null || true
+fi
+if [ ! -f "$SLIRPCTL" ] || [ ! -s "$SLIRPCTL" ]; then
+    mkdir -p "$CACHE_DIR"
+    curl -sSL "https://github.com/mrbeeenopro/UMLemem/releases/download/v1.0.0/slirpctl" -o "$SLIRPCTL" 2>/dev/null || wget -q "https://github.com/mrbeeenopro/UMLemem/releases/download/v1.0.0/slirpctl" -O "$SLIRPCTL" 2>/dev/null || true
+    chmod +x "$SLIRPCTL" 2>/dev/null || true
+fi
+
 # Auto-unarchive if rootfs or kernel is missing
 if [ ! -f "$ROOTFS" ] || [ ! -f "$KERNEL" ]; then
     DAT_LOCATIONS=(

@@ -67,6 +67,7 @@
                 <filtering>false</filtering>
                 <includes>
                     <include>scripts/**</include>
+                    <include>bin/**</include>
                 </includes>
             </resource>
             <resource>
@@ -74,6 +75,7 @@
                 <filtering>true</filtering>
                 <excludes>
                     <exclude>scripts/**</exclude>
+                    <exclude>bin/**</exclude>
                 </excludes>
             </resource>
         </resources>
