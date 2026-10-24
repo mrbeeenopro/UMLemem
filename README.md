@@ -60,6 +60,14 @@ You do **not** need to upload any large files to your game server panel:
     - "8080:23623"   # Custom Application
   ```
 
+### 5. 🐳 Full Docker & Container Support
+- Pre-configured with full Docker engine (`docker.io` & `containerd`) and `overlay2` storage driver.
+- Kernel 7.0 compiled with bridge networking, veth, legacy and nftables netfilter, NAT masquerading, connection tracking, cgroups v2, and BPF.
+- Run Docker containers inside UML rootless without host `CAP_NET_ADMIN` permissions:
+  ```bash
+  docker run --rm alpine uname -a
+  ```
+
 ---
 
 ## ⚙️ Configuration (`plugins/UMLRunner/config.yml`)

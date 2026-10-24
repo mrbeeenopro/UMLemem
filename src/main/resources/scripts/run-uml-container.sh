@@ -181,7 +181,7 @@ fi
 rm -f "$BESS_SOCK" "$API_SOCK"
 
 # Start slirp4netns in BESS mode
-"$SLIRP" -a "$API_SOCK" --target-type=bess "$BESS_SOCK" > /tmp/slirp-$$.log 2>&1 &
+nohup "$SLIRP" -a "$API_SOCK" --target-type=bess "$BESS_SOCK" </dev/null > /tmp/slirp-$$.log 2>&1 &
 SLIRP_PID=$!
 
 # Wait for BESS socket to be created
@@ -230,7 +230,7 @@ fi
         fi
         sleep 0.2
     done
-) &
+) </dev/null >/dev/null 2>&1 &
 
 # Launch UML kernel
 exec "$KERNEL" \
