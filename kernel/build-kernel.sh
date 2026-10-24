@@ -58,9 +58,9 @@ else
             fi
         fi
         if [ "$(id -u)" -eq 0 ]; then
-            apt-get update && apt-get install -y --no-install-recommends linux-source-7.0.0 lbzip2
+            apt-get update && apt-get install -y --no-install-recommends binutils linux-source-7.0.0 lbzip2
         else
-            sudo apt-get update && sudo apt-get install -y --no-install-recommends linux-source-7.0.0 lbzip2
+            sudo apt-get update && sudo apt-get install -y --no-install-recommends binutils linux-source-7.0.0 lbzip2
         fi
         tar -I lbzip2 -xf /usr/src/linux-source-7.0.0.tar.bz2 -C "$BUILD_SRC" --strip-components=1
     fi

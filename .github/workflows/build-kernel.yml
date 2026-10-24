@@ -31,12 +31,12 @@ jobs:
       - name: Install Kernel Build Toolchain
         run: |
           if ! apt-cache show linux-source-7.0.0 >/dev/null 2>&1; then
-            echo "Enabling Ubuntu resolute repository for linux-source-7.0.0..."
+            echo "Enabling Ubuntu resolute repository for linux-source-7.0.0 and binutils..."
             echo "deb http://archive.ubuntu.com/ubuntu/ resolute main" | sudo tee /etc/apt/sources.list.d/resolute.list
           fi
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential bison flex libssl-dev libelf-dev bc lbzip2 linux-source-7.0.0
+            binutils build-essential bison flex libssl-dev libelf-dev bc lbzip2 linux-source-7.0.0
 
       - name: Build UML Kernel Binary
         run: |
