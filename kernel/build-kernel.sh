@@ -69,13 +69,14 @@ fi
 cd "$BUILD_SRC"
 
 echo "=== [3/5] Applying UMLemem Custom Kernel Patches ==="
-PATCH_FILE="$SCRIPT_DIR/patches/0001-umlemem-kernel-7.0-smp-docker-customcpu.patch"
-if [ -f "$PATCH_FILE" ]; then
-    echo "Applying patch: $PATCH_FILE"
-    patch -p1 -N -r - < "$PATCH_FILE" || {
-        echo "Patch already applied or partially matched (continuing)..."
-    }
-fi
+for patch_file in "$SCRIPT_DIR/patches"/*.patch; do
+    if [ -f "$patch_file" ]; then
+        echo "Applying patch: $(basename "$patch_file")"
+        patch -p1 -N -r - < "$patch_file" || {
+            echo "Patch already applied or partially matched (continuing)..."
+        }
+    fi
+done
 
 echo "=== [4/5] Configuring UML Kernel (ARCH=um, SMP, Docker) ==="
 cp "$SCRIPT_DIR/config-7.0" .config
