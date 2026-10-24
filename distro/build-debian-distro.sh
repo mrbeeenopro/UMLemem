@@ -15,6 +15,7 @@ ROOT_PASS="${ROOT_PASS:-12345678}"
 DEBIAN_MIRROR="${DEBIAN_MIRROR:-http://deb.debian.org/debian/}"
 
 mkdir -p "$OUTPUT_DIR"
+OUTPUT_DIR="$(cd "$OUTPUT_DIR" && pwd)"
 WORK_DIR="/tmp/uml-distro-build-$$"
 mkdir -p "$WORK_DIR"
 MNT="$WORK_DIR/mnt"
