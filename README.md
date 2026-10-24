@@ -38,6 +38,7 @@ You do **not** need to upload any large files to your game server panel:
 
 ### 1. 🐧 UMLemem Distro (Debian 13 Trixie / Kernel 7.0 SMP)
 - Built from scratch on **Linux Kernel 7.0.14** with SMP multi-vCPU support (`ncpus=2`, `ncpus=4`, up to 16 cores).
+- Custom CPU branding: `Mrbeenopro.com (R) UMLemem(R) CPU project on x86_64 @3.60GHz` (`GenuineMrbeenopro`).
 - Upgraded to **Debian 13 (Trixie)** base with custom `UMLemem` distro branding.
 - Default root password: `12345678`.
 - Virtual X11 forwarding ready (`xauth`, `x11-apps`, `xclock`).
