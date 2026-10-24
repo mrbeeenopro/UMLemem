@@ -49,6 +49,14 @@ else
         tar -I lbzip2 -xf /usr/src/linux-source-7.0.0.tar.bz2 -C "$BUILD_SRC" --strip-components=1
     else
         echo "Installing linux-source-7.0.0..."
+        if ! apt-cache show linux-source-7.0.0 >/dev/null 2>&1; then
+            echo "Enabling Ubuntu resolute repository for linux-source-7.0.0..."
+            if [ "$(id -u)" -eq 0 ]; then
+                echo "deb http://archive.ubuntu.com/ubuntu/ resolute main" > /etc/apt/sources.list.d/resolute.list
+            else
+                echo "deb http://archive.ubuntu.com/ubuntu/ resolute main" | sudo tee /etc/apt/sources.list.d/resolute.list
+            fi
+        fi
         if [ "$(id -u)" -eq 0 ]; then
             apt-get update && apt-get install -y --no-install-recommends linux-source-7.0.0 lbzip2
         else

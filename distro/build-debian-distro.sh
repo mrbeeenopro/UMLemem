@@ -30,7 +30,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 echo "=== [1/6] Checking Prerequisites ==="
-REQUIRED_TOOLS=(debootstrap e2fsprogs tar gzip curl)
+REQUIRED_TOOLS=(debootstrap e2fsprogs tar gzip curl debian-archive-keyring)
 MISSING_TOOLS=()
 for tool in "${REQUIRED_TOOLS[@]}"; do
     if ! command -v "$tool" >/dev/null 2>&1; then
@@ -58,7 +58,7 @@ mount -o loop "$ROOTFS_IMG" "$MNT"
 echo "=== [3/6] Bootstrapping Debian $SUITE Base System ==="
 debootstrap \
     --variant=minbase \
-    --include=iproute2,systemd-sysv,locales,curl,nano,procps,net-tools,iputils-ping,ca-certificates,udev,openssh-server,xauth,x11-apps,iptables,ip6tables,docker.io,containerd \
+    --include=iproute2,systemd-sysv,locales,curl,nano,procps,net-tools,iputils-ping,ca-certificates,udev,openssh-server,xauth,x11-apps,iptables,docker.io,containerd \
     "$SUITE" "$MNT" "$DEBIAN_MIRROR"
 
 echo "=== [4/6] Configuring UMLemem Debian Distro ==="
