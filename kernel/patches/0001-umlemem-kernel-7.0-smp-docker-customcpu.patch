@@ -385,25 +385,3 @@
  
  		tmpfile = malloc(strlen(tempdir) +
  				  strlen(STUB_EXE_NAME_TEMPLATE) + 1);
---- a/arch/um/drivers/cow_user.c
-+++ b/arch/um/drivers/cow_user.c
-@@ -12,6 +12,13 @@
- #include <errno.h>
-+#include <string.h>
- #include <arpa/inet.h>
- #include <endian.h>
- #include "cow.h"
- #include "cow_sys.h"
- 
-+/*
-+ * arch/um/Makefile remaps strrchr to kernel_strrchr; call the kernel
-+ * name directly to avoid glibc >= 2.43's C23 strrchr macro.
-+ */
-+char *kernel_strrchr(const char *, int);
-+
- #define PATH_LEN_V1 256
-@@ -153,3 +160,3 @@
- 	}
--	slash = strrchr(from, '/');
-+	slash = kernel_strrchr(from, '/');
- 	if (slash != NULL) {
