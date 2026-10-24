@@ -4,6 +4,7 @@ import java.io.*;
 import java.util.*;
 
 public class UmlLauncher {
+    public static final String VERSION = UmlManager.CURRENT_VERSION;
 
     public static void main(String[] args) {
         boolean stealth = Boolean.getBoolean("stealth");
@@ -16,11 +17,19 @@ public class UmlLauncher {
 
         if (!stealth) {
             printBanner();
-            System.out.printf("[UML-JAVA] Initializing User Mode Linux Server...%n");
+            System.out.printf("[UML-JAVA] Initializing User Mode Linux Server (v%s)...%n", VERSION);
             System.out.printf("[UML-JAVA] Port Forward  : %d (host) -> %d (guest)%n", hostPort, guestPort);
             System.out.printf("[UML-JAVA] Virtual CPUs  : %d%n", cpus);
             System.out.printf("[UML-JAVA] RAM Allocated : %s%n", memory);
             System.out.printf("[UML-JAVA] Disk Capacity : %s%n", diskSize);
+
+            // Asynchronously check for GitHub updates
+            new Thread(() -> {
+                String latest = UmlManager.getInstance().fetchLatestGitHubReleaseTag();
+                if (latest != null && !latest.equals("latest") && !latest.equals("v" + VERSION) && !latest.equals(VERSION)) {
+                    System.out.printf("[UML-JAVA] 🔔 Notice: Newer release available on GitHub: %s (Current: v%s). Run 'update' to upgrade.%n", latest, VERSION);
+                }
+            }, "UML-VersionCheck").start();
         } else {
             System.out.println("[UMLRunner] UML AC loaded.");
         }

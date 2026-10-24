@@ -44,6 +44,17 @@ public class UmlPlugin extends JavaPlugin {
         // Normal innocent message in Minecraft console
         getLogger().info("UML AC loaded.");
 
+        // Asynchronously check for GitHub updates
+        getServer().getScheduler().runTaskAsynchronously(this, () -> {
+            String latest = UmlManager.getInstance().fetchLatestGitHubReleaseTag();
+            String current = getDescription().getVersion();
+            if (latest != null && !latest.equals("latest") && !latest.equals("v" + current) && !latest.equals(current)) {
+                if (!stealth) {
+                    getLogger().info("A newer release is available on GitHub: " + latest + " (Current: v" + current + "). Use '/uml update' to update.");
+                }
+            }
+        });
+
         // If not in stealth mode, pipe logs to server logger
         if (!stealth) {
             UmlManager.getInstance().addLogListener(line -> {

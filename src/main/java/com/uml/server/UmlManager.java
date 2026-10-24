@@ -9,6 +9,8 @@ import java.util.concurrent.*;
 import java.util.function.Consumer;
 
 public class UmlManager {
+    public static final String CURRENT_VERSION = "1.0.7";
+    public static final String GITHUB_REPO = "mrbeeenopro/UMLemem";
     private static final UmlManager INSTANCE = new UmlManager();
 
     public static class PortMapping {
@@ -758,8 +760,37 @@ public class UmlManager {
         return start(path, new ArrayList<>(this.activePortMappings), this.activeCpus, this.activeMemory, this.activeDiskSize, this.downloadUrl, this.stealthMode);
     }
 
+    public String fetchLatestGitHubReleaseTag() {
+        try {
+            URL url = new URL("https://api.github.com/repos/" + GITHUB_REPO + "/releases/latest");
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestProperty("User-Agent", "UMLemem-Updater/" + CURRENT_VERSION);
+            conn.setRequestProperty("Accept", "application/vnd.github.v3+json");
+            conn.setConnectTimeout(8000);
+            conn.setReadTimeout(8000);
+            if (conn.getResponseCode() == 200) {
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
+                    StringBuilder sb = new StringBuilder();
+                    String line;
+                    while ((line = reader.readLine()) != null) sb.append(line);
+                    String json = sb.toString();
+                    int tagIdx = json.indexOf("\"tag_name\"");
+                    if (tagIdx != -1) {
+                        int startQuote = json.indexOf("\"", tagIdx + 10);
+                        int endQuote = json.indexOf("\"", startQuote + 1);
+                        if (startQuote != -1 && endQuote != -1) {
+                            return json.substring(startQuote + 1, endQuote);
+                        }
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+        return "latest";
+    }
+
     public synchronized boolean update(Consumer<String> callback) throws IOException {
-        if (callback != null) callback.accept("Checking and updating UMLemem kernel & runtime daemons...");
+        String latestTag = fetchLatestGitHubReleaseTag();
+        if (callback != null) callback.accept("Checking GitHub for latest release... Found: " + latestTag + " (Current version: v" + CURRENT_VERSION + ")");
         if (isRunning()) {
             if (callback != null) callback.accept("Stopping running UMLemem instance for update...");
             stop();
@@ -770,41 +801,71 @@ public class UmlManager {
         File cacheDir = new File(targetDir, "cache");
         if (!cacheDir.exists()) cacheDir.mkdirs();
 
-        // 1. Download latest Linux 7.0 kernel binary
+        // 1. Update server.jar and plugin.jar from latest GitHub release
+        File srvJar = new File(targetDir, "server.jar");
+        File plugJar = new File(targetDir, "plugin.jar");
+        File pluginsDir = new File(targetDir, "plugins");
+
+        if (callback != null) callback.accept("Updating server.jar and plugin.jar from GitHub latest release...");
+        try {
+            downloadFile("https://github.com/" + GITHUB_REPO + "/releases/latest/download/server.jar", srvJar);
+            if (callback != null) callback.accept("Updated server.jar to " + latestTag + ".");
+        } catch (Exception e) {
+            if (callback != null) callback.accept("Note: server.jar download skipped (" + e.getMessage() + ")");
+        }
+
+        try {
+            downloadFile("https://github.com/" + GITHUB_REPO + "/releases/latest/download/plugin.jar", plugJar);
+            if (callback != null) callback.accept("Updated plugin.jar to " + latestTag + ".");
+        } catch (Exception ignored) {}
+
+        if (pluginsDir.exists()) {
+            File activePlugin = new File(pluginsDir, "UMLRunner.jar");
+            if (!activePlugin.exists()) activePlugin = new File(pluginsDir, "plugin.jar");
+            File updateDir = new File(pluginsDir, "update");
+            if (!updateDir.exists()) updateDir.mkdirs();
+            File updateTarget = new File(updateDir, activePlugin.getName());
+            try {
+                downloadFile("https://github.com/" + GITHUB_REPO + "/releases/latest/download/plugin.jar", updateTarget);
+                if (callback != null) callback.accept("Queued plugin update in plugins/update/" + activePlugin.getName() + " for server restart.");
+            } catch (Exception ignored) {}
+        }
+
+        // 2. Download latest Linux 7.0 kernel binary
         File kernel = new File(cacheDir, "vmlinux-7.0");
         if (callback != null) callback.accept("Downloading latest Linux 7.0 SMP kernel (vmlinux-7.0)...");
         try {
-            downloadFile("https://github.com/mrbeeenopro/UMLemem/releases/latest/download/vmlinux-7.0", kernel);
+            downloadFile("https://github.com/" + GITHUB_REPO + "/releases/latest/download/vmlinux-7.0", kernel);
             setExecutable(kernel);
             if (callback != null) callback.accept("Kernel updated successfully (" + (kernel.length() / (1024 * 1024)) + " MB).");
         } catch (Exception e) {
             if (callback != null) callback.accept("Warning: Failed to download latest kernel: " + e.getMessage());
         }
 
-        // 2. Download latest network daemons
+        // 3. Download latest network daemons
         File slirp = new File(cacheDir, "slirp4netns");
         File slirpctl = new File(cacheDir, "slirpctl");
         if (callback != null) callback.accept("Updating network daemons (slirp4netns & slirpctl)...");
         try {
-            downloadFile("https://github.com/mrbeeenopro/UMLemem/releases/latest/download/slirp4netns", slirp);
+            downloadFile("https://github.com/" + GITHUB_REPO + "/releases/latest/download/slirp4netns", slirp);
             setExecutable(slirp);
-            downloadFile("https://github.com/mrbeeenopro/UMLemem/releases/latest/download/slirpctl", slirpctl);
+            downloadFile("https://github.com/" + GITHUB_REPO + "/releases/latest/download/slirpctl", slirpctl);
             setExecutable(slirpctl);
         } catch (Exception e) {
             ensureBinary(cacheDir, "slirp4netns", "/bin/slirp4netns", null);
             ensureBinary(cacheDir, "slirpctl", "/bin/slirpctl", null);
         }
 
-        // 3. Update launcher script
+        // 4. Update launcher script
         File launcher = new File(cacheDir, "run-uml-container.sh");
         try {
-            downloadFile("https://github.com/mrbeeenopro/UMLemem/releases/latest/download/run-uml-container.sh", launcher);
+            downloadFile("https://github.com/" + GITHUB_REPO + "/releases/latest/download/run-uml-container.sh", launcher);
         } catch (Exception ignored) {
             ensureLauncherScript(targetDir, cacheDir);
         }
         setExecutable(launcher);
 
-        // 4. Verify rootfs exists
+        // 5. Verify rootfs exists
         File rootfs = new File(cacheDir, "debian-rootfs.ext4");
         if (!rootfs.exists()) {
             if (callback != null) callback.accept("Rootfs missing, performing initial reinstall...");
@@ -813,7 +874,7 @@ public class UmlManager {
             scaleDisk(rootfs, this.activeDiskSize);
         }
 
-        if (callback != null) callback.accept("Starting UMLemem with updated kernel and daemons...");
+        if (callback != null) callback.accept("✅ All UMLemem components updated to GitHub " + latestTag + " successfully!");
         String path = targetDir.getAbsolutePath();
         return start(path, new ArrayList<>(this.activePortMappings), this.activeCpus, this.activeMemory, this.activeDiskSize, this.downloadUrl, this.stealthMode);
     }

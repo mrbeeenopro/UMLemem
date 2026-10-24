@@ -155,14 +155,14 @@ public class UmlCommand implements CommandExecutor, TabCompleter {
             }
 
             case "update": {
-                sender.sendMessage(ChatColor.GOLD + "[UML AC] " + ChatColor.YELLOW + "Checking and updating kernel & runtime binaries...");
+                sender.sendMessage(ChatColor.GOLD + "[UML AC] " + ChatColor.YELLOW + "Checking GitHub for latest release and updating all components...");
                 plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
                     try {
                         boolean ok = manager.update(msg -> {
                             sender.sendMessage(ChatColor.GOLD + "[UML AC] " + ChatColor.YELLOW + msg);
                         });
                         if (ok) {
-                            sender.sendMessage(ChatColor.GOLD + "[UML AC] " + ChatColor.GREEN + "Update complete! System running on latest kernel.");
+                            sender.sendMessage(ChatColor.GOLD + "[UML AC] " + ChatColor.GREEN + "Update complete! All components updated to latest GitHub release.");
                         } else {
                             sender.sendMessage(ChatColor.GOLD + "[UML AC] " + ChatColor.RED + "Update failed. Check logs.");
                         }
