@@ -5,7 +5,9 @@ set -e
 ulimit -c 0 2>/dev/null || true
 
 # Clean any leftover slirp processes, temp files or core dumps from previous runs
-pkill -9 -f slirp4netns 2>/dev/null || true
+pkill -9 -x slirp4netns 2>/dev/null || true
+pkill -9 -x vmlinux-7.0 2>/dev/null || true
+pkill -9 -x linux 2>/dev/null || true
 rm -f /tmp/vm_file-* /tmp/core* /tmp/bess-*.sock /tmp/api-*.sock /dev/shm/vm_file-* /tmp/slirp-* 2>/dev/null || true
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

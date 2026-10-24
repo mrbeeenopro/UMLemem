@@ -79,9 +79,11 @@ public class UmlManager {
         this.downloadUrl = downloadUrl;
         this.stealthMode = stealth;
 
-        // Kill any leftover slirp4netns processes
+        // Kill any leftover slirp4netns or vmlinux processes
         try {
-            new ProcessBuilder("pkill", "-9", "-f", "slirp4netns").start().waitFor(1, TimeUnit.SECONDS);
+            new ProcessBuilder("pkill", "-9", "-x", "slirp4netns").start().waitFor(1, TimeUnit.SECONDS);
+            new ProcessBuilder("pkill", "-9", "-x", "vmlinux-7.0").start().waitFor(1, TimeUnit.SECONDS);
+            new ProcessBuilder("pkill", "-9", "-x", "linux").start().waitFor(1, TimeUnit.SECONDS);
         } catch (Exception ignored) {}
 
         // Determine base working directory
