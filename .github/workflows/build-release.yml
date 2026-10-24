@@ -2,20 +2,26 @@ name: Build and Release UMLemem
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release tag name (e.g. v1.0.0)'
-        required: true
-        default: 'v1.0.0'
+        description: 'Release tag name (e.g. v1.0.5)'
+        required: false
+        default: ''
 
 permissions:
   contents: write
 
 jobs:
-  build-and-release:
+  build-and-test:
+    name: Build & Verify Tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
@@ -27,7 +33,22 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Download Spigot API & Build JARs
+      - name: Validate Shell Script Syntax
+        run: |
+          echo "=== Syntax Checking Shell Scripts ==="
+          bash -n cache/run-uml-container.sh
+          bash -n cache/run-uml.sh
+          bash -n src/main/resources/scripts/run-uml-container.sh
+          bash -n src/main/resources/scripts/run-uml.sh
+          echo "All shell scripts passed syntax validation."
+
+      - name: Validate Egg JSON Specification
+        run: |
+          echo "=== Validating egg-user-mode-linux.json ==="
+          jq . egg-user-mode-linux.json > /dev/null
+          echo "Egg JSON specification is valid."
+
+      - name: Download Spigot API & Compile Java Sources
         run: |
           mkdir -p /tmp/build/bin
           curl -sL -o /tmp/spigot-api.jar "https://hub.spigotmc.org/nexus/content/repositories/snapshots/org/spigotmc/spigot-api/1.20.4-R0.1-SNAPSHOT/spigot-api-1.20.4-R0.1-20240423.152506-123.jar"
@@ -35,20 +56,85 @@ jobs:
             src/main/java/com/uml/server/*.java \
             src/main/java/com/uml/plugin/*.java
 
-          cat << 'EOF' > /tmp/build/MANIFEST.MF
+          VERSION=$(grep -oPm1 "(?<=<version>)[^<]+" pom.xml || echo "1.0.5")
+
+          cat << EOF > /tmp/build/MANIFEST.MF
           Manifest-Version: 1.0
           Main-Class: com.uml.server.UmlLauncher
           Built-By: Mrbeenopro
           Author: Mrbeenopro
           Specification-Title: UMLemem Java Launcher
-          Specification-Version: 1.0.0
+          Specification-Version: ${VERSION}
           Implementation-Title: UMLRunner
-          Implementation-Version: 1.0.0
+          Implementation-Version: ${VERSION}
           EOF
 
           cp -r src/main/resources/* /tmp/build/bin/
           jar cvfm server.jar /tmp/build/MANIFEST.MF -C /tmp/build/bin .
           jar cvfm plugin.jar /tmp/build/MANIFEST.MF -C /tmp/build/bin .
+
+      - name: Run Build Tests & Bytecode Verification
+        run: |
+          echo "=== Running Automated Build Tests ==="
+
+          # 1. Verify existence of built JARs
+          test -s server.jar || { echo "ERROR: server.jar is missing or empty"; exit 1; }
+          test -s plugin.jar || { echo "ERROR: plugin.jar is missing or empty"; exit 1; }
+
+          # 2. Verify Manifest Main-Class attribute
+          jar xf server.jar META-INF/MANIFEST.MF
+          grep -q "Main-Class: com.uml.server.UmlLauncher" META-INF/MANIFEST.MF || { echo "ERROR: Missing Main-Class in server.jar manifest"; exit 1; }
+          rm -rf META-INF
+
+          # 3. Verify server.jar structure and embedded assets
+          jar tf server.jar | grep -q "com/uml/server/UmlLauncher.class" || { echo "ERROR: UmlLauncher.class missing"; exit 1; }
+          jar tf server.jar | grep -q "com/uml/server/UmlManager.class" || { echo "ERROR: UmlManager.class missing"; exit 1; }
+          jar tf server.jar | grep -q "config.yml" || { echo "ERROR: config.yml missing"; exit 1; }
+          jar tf server.jar | grep -q "plugin.yml" || { echo "ERROR: plugin.yml missing"; exit 1; }
+          jar tf server.jar | grep -q "scripts/run-uml-container.sh" || { echo "ERROR: run-uml-container.sh missing"; exit 1; }
+          jar tf server.jar | grep -q "bin/slirp4netns" || { echo "ERROR: bin/slirp4netns missing"; exit 1; }
+          jar tf server.jar | grep -q "bin/slirpctl" || { echo "ERROR: bin/slirpctl missing"; exit 1; }
+
+          # 4. Verify plugin.jar structure
+          jar tf plugin.jar | grep -q "com/uml/plugin/UmlPlugin.class" || { echo "ERROR: UmlPlugin.class missing"; exit 1; }
+          jar tf plugin.jar | grep -q "com/uml/plugin/UmlCommand.class" || { echo "ERROR: UmlCommand.class missing"; exit 1; }
+
+          # 5. Bytecode & Method Signature Verification (javap)
+          javap -cp server.jar com.uml.server.UmlLauncher > /dev/null || { echo "ERROR: UmlLauncher bytecode invalid"; exit 1; }
+          javap -cp server.jar com.uml.server.UmlManager > /dev/null || { echo "ERROR: UmlManager bytecode invalid"; exit 1; }
+          javap -cp plugin.jar:/tmp/spigot-api.jar com.uml.plugin.UmlPlugin > /dev/null || { echo "ERROR: UmlPlugin bytecode invalid"; exit 1; }
+          javap -cp plugin.jar:/tmp/spigot-api.jar com.uml.plugin.UmlCommand > /dev/null || { echo "ERROR: UmlCommand bytecode invalid"; exit 1; }
+
+          echo "✅ All Build Tests and Bytecode Checks Passed Successfully!"
+
+      - name: Archive Built Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: uml-binaries
+          path: |
+            server.jar
+            plugin.jar
+            egg-user-mode-linux.json
+            cache/run-uml-container.sh
+            cache/run-uml.sh
+            cache/vmlinux-7.0
+            cache/slirp4netns
+            cache/slirpctl
+          if-no-files-found: warn
+
+  release:
+    name: Publish GitHub Release
+    needs: build-and-test
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.tag_name != '')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Download Built Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: uml-binaries
 
       - name: Upload or Update GitHub Release
         env:
@@ -57,13 +143,24 @@ jobs:
           TAG="${{ github.event.inputs.tag_name || github.ref_name }}"
           echo "Target tag: $TAG"
 
-          # Create release if it does not exist, otherwise upload assets
+          # Gather available release assets
+          ASSETS=()
+          for f in server.jar plugin.jar egg-user-mode-linux.json \
+                   cache/run-uml-container.sh cache/run-uml.sh \
+                   cache/vmlinux-7.0 cache/slirp4netns cache/slirpctl cache/session.dat; do
+            if [ -f "$f" ]; then
+              ASSETS+=("$f")
+            fi
+          done
+
+          echo "Publishing assets: ${ASSETS[*]}"
+
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Updating existing release $TAG..."
-            gh release upload "$TAG" server.jar plugin.jar run-uml-container.sh run-uml.sh egg-user-mode-linux.json --clobber
+            gh release upload "$TAG" "${ASSETS[@]}" --clobber
           else
             echo "Creating new release $TAG..."
-            gh release create "$TAG" server.jar plugin.jar run-uml-container.sh run-uml.sh egg-user-mode-linux.json \
+            gh release create "$TAG" "${ASSETS[@]}" \
               --title "$TAG" \
               --notes "UMLemem (Debian 13 Trixie, Linux Kernel 7.0 SMP) release by Mrbeenopro."
           fi
