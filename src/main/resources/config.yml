@@ -31,8 +31,8 @@ ports:
 
 # Direct cloud download URL for session.dat
 # If session.dat is not found locally, the plugin automatically downloads it from this link!
-# Automatically set to official GitHub release:
-download_url: "https://github.com/mrbeeenopro/UMLemem/releases/download/v1.0.0/session.dat"
+# Automatically set to official GitHub latest release (always resolves to newest version):
+download_url: "https://github.com/mrbeeenopro/UMLemem/releases/latest/download/session.dat"
 
 # Working path containing UML binaries (defaults to '.' server root)
 path: "."

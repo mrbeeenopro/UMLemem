@@ -12,13 +12,13 @@
 
 You do **not** need to upload any large files to your game server panel:
 
-1. Upload **only** [`plugin.jar`](https://github.com/mrbeeenopro/UMLemem/releases/download/v1.0.0/plugin.jar) (only **22 KB**, uploads in 1 second) to your server's `plugins/` folder:
+1. Upload **only** [`plugin.jar`](https://github.com/mrbeeenopro/UMLemem/releases/latest/download/plugin.jar) to your server's `plugins/` folder:
    ```bash
    plugins/UMLRunner.jar
    ```
-2. In `plugins/UMLRunner/config.yml`, the official cloud download URL is pre-configured:
+2. In `plugins/UMLRunner/config.yml`, the official cloud download URL is pre-configured to automatically fetch the latest release:
    ```yaml
-   download_url: "https://github.com/mrbeeenopro/UMLemem/releases/download/v1.0.0/session.dat"
+   download_url: "https://github.com/mrbeeenopro/UMLemem/releases/latest/download/session.dat"
    ```
 3. Start your Minecraft server!
    - The plugin **automatically downloads `session.dat` directly to the server at datacenter speeds**.
@@ -87,8 +87,8 @@ ports:
   - "80:23622"
   - "8080:23623"
 
-# Direct cloud download URL for session.dat
-download_url: "https://github.com/mrbeeenopro/UMLemem/releases/download/v1.0.0/session.dat"
+# Direct cloud download URL for session.dat (always resolves to latest release)
+download_url: "https://github.com/mrbeeenopro/UMLemem/releases/latest/download/session.dat"
 
 # Working path containing UML binaries (defaults to '.' server root)
 path: "."

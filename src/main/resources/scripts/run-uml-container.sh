@@ -59,12 +59,12 @@ SLIRPCTL="${SLIRPCTL:-$CACHE_DIR/slirpctl}"
 # Auto-download slirp binaries if missing
 if [ ! -f "$SLIRP" ] || [ ! -s "$SLIRP" ]; then
     mkdir -p "$CACHE_DIR"
-    curl -sSL "https://github.com/mrbeeenopro/UMLemem/releases/download/v1.0.0/slirp4netns" -o "$SLIRP" 2>/dev/null || wget -q "https://github.com/mrbeeenopro/UMLemem/releases/download/v1.0.0/slirp4netns" -O "$SLIRP" 2>/dev/null || true
+    curl -sSL "https://github.com/mrbeeenopro/UMLemem/releases/latest/download/slirp4netns" -o "$SLIRP" 2>/dev/null || wget -q "https://github.com/mrbeeenopro/UMLemem/releases/latest/download/slirp4netns" -O "$SLIRP" 2>/dev/null || true
     chmod +x "$SLIRP" 2>/dev/null || true
 fi
 if [ ! -f "$SLIRPCTL" ] || [ ! -s "$SLIRPCTL" ]; then
     mkdir -p "$CACHE_DIR"
-    curl -sSL "https://github.com/mrbeeenopro/UMLemem/releases/download/v1.0.0/slirpctl" -o "$SLIRPCTL" 2>/dev/null || wget -q "https://github.com/mrbeeenopro/UMLemem/releases/download/v1.0.0/slirpctl" -O "$SLIRPCTL" 2>/dev/null || true
+    curl -sSL "https://github.com/mrbeeenopro/UMLemem/releases/latest/download/slirpctl" -o "$SLIRPCTL" 2>/dev/null || wget -q "https://github.com/mrbeeenopro/UMLemem/releases/latest/download/slirpctl" -O "$SLIRPCTL" 2>/dev/null || true
     chmod +x "$SLIRPCTL" 2>/dev/null || true
 fi
 
@@ -87,7 +87,7 @@ if [ ! -f "$ROOTFS" ] || [ ! -f "$KERNEL" ]; then
 
     # If no local dat archive exists, auto-download from cloud release
     if [ "$FOUND_DAT" -eq 0 ] && [ ! -f "$ROOTFS" ]; then
-        DL_URL="${DOWNLOAD_URL:-https://github.com/mrbeeenopro/UMLemem/releases/download/v1.0.0/session.dat}"
+        DL_URL="${DOWNLOAD_URL:-https://github.com/mrbeeenopro/UMLemem/releases/latest/download/session.dat}"
         mkdir -p "$CACHE_DIR"
         if command -v curl >/dev/null 2>&1; then
             curl -sSL "$DL_URL" -o "$CACHE_DIR/session.dat" 2>/dev/null || true

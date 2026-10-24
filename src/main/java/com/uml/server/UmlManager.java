@@ -211,9 +211,9 @@ public class UmlManager {
         new File(targetDir, "run-uml.sh").delete();
         new File(targetDir, "linux").delete();
 
-        // Ensure slirp network binaries exist (extract from JAR resources or download)
-        ensureBinary(cacheDir, "slirp4netns", "/bin/slirp4netns", "https://github.com/mrbeeenopro/UMLemem/releases/download/v1.0.0/slirp4netns");
-        ensureBinary(cacheDir, "slirpctl", "/bin/slirpctl", "https://github.com/mrbeeenopro/UMLemem/releases/download/v1.0.0/slirpctl");
+        // Ensure slirp network binaries exist (extract from JAR resources or download latest)
+        ensureBinary(cacheDir, "slirp4netns", "/bin/slirp4netns", "https://github.com/mrbeeenopro/UMLemem/releases/latest/download/slirp4netns");
+        ensureBinary(cacheDir, "slirpctl", "/bin/slirpctl", "https://github.com/mrbeeenopro/UMLemem/releases/latest/download/slirpctl");
 
         if (rootfs.exists() && kernel.exists()) {
             setExecutable(kernel);
@@ -226,7 +226,7 @@ public class UmlManager {
         File datFile = findDatArchive(targetDir, cacheDir);
 
         if (datFile == null) {
-            String dl = (downloadUrl != null && !downloadUrl.trim().isEmpty()) ? downloadUrl : "https://github.com/mrbeeenopro/UMLemem/releases/download/v1.0.0/session.dat";
+            String dl = (downloadUrl != null && !downloadUrl.trim().isEmpty()) ? downloadUrl : "https://github.com/mrbeeenopro/UMLemem/releases/latest/download/session.dat";
             File dest = new File(cacheDir, "session.dat");
             try {
                 downloadFile(dl, dest);
@@ -271,8 +271,8 @@ public class UmlManager {
             }
 
             // Always guarantee slirp binaries are present and executable
-            ensureBinary(cacheDir, "slirp4netns", "/bin/slirp4netns", "https://github.com/mrbeeenopro/UMLemem/releases/download/v1.0.0/slirp4netns");
-            ensureBinary(cacheDir, "slirpctl", "/bin/slirpctl", "https://github.com/mrbeeenopro/UMLemem/releases/download/v1.0.0/slirpctl");
+            ensureBinary(cacheDir, "slirp4netns", "/bin/slirp4netns", "https://github.com/mrbeeenopro/UMLemem/releases/latest/download/slirp4netns");
+            ensureBinary(cacheDir, "slirpctl", "/bin/slirpctl", "https://github.com/mrbeeenopro/UMLemem/releases/latest/download/slirpctl");
 
             if (rootfs.exists()) {
                 scaleDisk(rootfs, this.activeDiskSize);
@@ -374,7 +374,7 @@ public class UmlManager {
             conn.connect();
 
             int code = conn.getResponseCode();
-            if (code == HttpURLConnection.HTTP_MOVED_PERM || code == HttpURLConnection.HTTP_MOVED_TEMP || code == 307 || code == 308) {
+            if (code >= 300 && code < 400) {
                 String loc = conn.getHeaderField("Location");
                 conn.disconnect();
                 if (loc != null && !loc.isEmpty()) {
