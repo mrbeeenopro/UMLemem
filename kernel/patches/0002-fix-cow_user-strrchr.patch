@@ -1,12 +1,25 @@
---- a/arch/um/drivers/cow_user.c	2026-10-24 07:21:14.733921680 +0000
-+++ b/arch/um/drivers/cow_user.c	2026-10-24 07:21:14.734003036 +0000
-@@ -14,6 +14,9 @@
- #include <endian.h>
+--- a/arch/um/drivers/cow_user.c
++++ b/arch/um/drivers/cow_user.c
+@@ -16,6 +16,12 @@
  #include "cow.h"
  #include "cow_sys.h"
-+#include <string.h>
-+
-+char *kernel_strrchr(const char *, int);
  
- /*
-  * arch/um/Makefile remaps strrchr to kernel_strrchr; call the kernel
++/*
++ * arch/um/Makefile remaps strrchr to kernel_strrchr; call the kernel
++ * name directly to avoid glibc >= 2.43's C23 strrchr macro.
++ */
++char *kernel_strrchr(const char *, int);
++
+ #define PATH_LEN_V1 256
+ 
+ /* unsigned time_t works until year 2106 */
+@@ -153,7 +159,7 @@
+ 		cow_printf("absolutize : unable to get cwd - errno = %d\n",
+ 			   errno);
+ 		return -1;
+ 	}
+-	slash = strrchr(from, '/');
++	slash = kernel_strrchr(from, '/');
+ 	if (slash != NULL) {
+ 		*slash = '\0';
+ 		if (chdir(from)) {
